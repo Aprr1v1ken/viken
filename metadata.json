@@ -1,0 +1,8 @@
+{
+  "name": "Remix SYSJEGER V2.0 - GMIT BETEL FUIMELANG",
+  "description": "Sistem Informasi Manajemen Jemaat dan Gereja GMIT BETEL FUIMELANG. Pengelolaan data jemaat, kartu keluarga, rayon, sakramen, warta, absensi, jadwal ibadah, dan kas gereja.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
