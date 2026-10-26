@@ -1,8 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import { hashPassword, isHashedPassword } from './auth.ts';
 
-const DB_PATH = path.resolve(process.cwd(), 'sysjeger.sqlite');
+// Lokasi berkas database dapat diubah lewat variabel lingkungan,
+// misalnya untuk pemisahan data produksi/pengujian.
+const DB_PATH = process.env.SYSJEGER_DB_PATH
+  ? path.resolve(process.env.SYSJEGER_DB_PATH)
+  : path.resolve(process.cwd(), 'sysjeger.sqlite');
 
 let dbInstance: DatabaseSync | null = null;
 
@@ -268,6 +273,31 @@ function initSchema(db: DatabaseSync) {
   `);
 
   seedInitialData(db);
+  migrateLegacyPasswords(db);
+}
+
+/**
+ * Database versi awal menyimpan kata sandi sebagai teks polos.
+ * Fungsi ini meningkatkannya menjadi hash scrypt pada saat server pertama
+ * kali berjalan, tanpa mengubah kata sandi yang sudah diketahui pengguna.
+ */
+function migrateLegacyPasswords(db: DatabaseSync) {
+  try {
+    const rows = db.prepare('SELECT id, password_hash FROM users').all() as Array<{ id: string; password_hash: string }>;
+    const update = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+    for (const row of rows) {
+      if (row.password_hash && !isHashedPassword(row.password_hash)) {
+        update.run(hashPassword(row.password_hash), row.id);
+      }
+    }
+    // Akun percontohan jemaat terhubung ke anggota m1 (Yohanis Tefa) agar
+    // Portal Jemaat menampilkan kartu keluarga yang benar.
+    db.prepare(
+      "UPDATE users SET member_id = 'm1' WHERE username = 'jemaat1' AND (member_id IS NULL OR member_id = '') AND EXISTS (SELECT 1 FROM members WHERE id = 'm1')"
+    ).run();
+  } catch (err) {
+    console.error('Migrasi kata sandi gagal:', err);
+  }
 }
 
 export function emptyAllDatabaseTables(keepAdminUsers: boolean = true) {
@@ -392,7 +422,9 @@ function seedInitialData(db: DatabaseSync, force: boolean = false) {
   ];
   const insertUser = db.prepare('INSERT INTO users (id, username, password_hash, name, role, rayon_id, member_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, \'Aktif\', \'2026-01-01 08:00:00\')');
   for (const u of users) {
-    insertUser.run(u.id, u.username, u.password_hash, u.name, u.role, u.rayon_id, u.phone, u.email);
+    // Kata sandi awal pada daftar di atas hanya untuk pembuatan akun pertama;
+    // yang disimpan ke database adalah hash-nya.
+    insertUser.run(u.id, u.username, hashPassword(u.password_hash), u.name, u.role, u.rayon_id, u.phone, u.email);
   }
 
   // 5. Families (5 Kepala Keluarga dalam 4 Rayon)

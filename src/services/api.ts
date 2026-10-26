@@ -1,8 +1,6 @@
 import type {
   Member,
   Family,
-  Rayon,
-  CategorialGroup,
   ChurchStaff,
   BaptismRecord,
   ConfirmationRecord,
@@ -14,25 +12,129 @@ import type {
   FinancialTransaction,
   DocumentRecord,
   Announcement,
-  DataCorrectionRequest,
-  AuditLog,
   User,
 } from '../types/index.ts';
 
 const API_BASE = '/api';
 
-export async function loginApi(username: string, password: string): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  return res.json();
+/* ------------------------------------------------------------------ */
+/* Token sesi                                                          */
+/* ------------------------------------------------------------------ */
+
+const TOKEN_KEY = 'sysjeger_token';
+const USER_KEY = 'sysjeger_user';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
+export function setAuthSession(token: string, user: User) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    /* penyimpanan tidak tersedia — sesi hanya berlaku selama halaman dibuka */
+  }
+}
+
+export function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearAuthSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* abaikan */
+  }
+}
+
+/** Dipanggil App saat server menolak sesi (401) agar pengguna diarahkan login ulang. */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
+async function apiFetch(path: string, init: RequestInit = {}): Promise<any> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+  };
+  if (init.body) headers['Content-Type'] = 'application/json';
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  if (res.status === 401 && !path.startsWith('/auth/login')) {
+    clearAuthSession();
+    onUnauthorized?.();
+  }
+
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : { success: res.ok };
+  } catch {
+    return { success: false, message: text || `Permintaan gagal (${res.status})` };
+  }
+}
+
+function postJson(path: string, data: unknown) {
+  return apiFetch(path, { method: 'POST', body: JSON.stringify(data ?? {}) });
+}
+
+/* ------------------------------------------------------------------ */
+/* Autentikasi & data publik                                           */
+/* ------------------------------------------------------------------ */
+
+export async function loginApi(
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
+  const res = await apiFetch('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+  if (res?.success && res.token && res.user) {
+    setAuthSession(res.token, res.user);
+  }
+  return res;
+}
+
+export async function fetchMeApi() {
+  return apiFetch('/auth/me');
+}
+
+export async function changePasswordApi(currentPassword: string, newPassword: string) {
+  return postJson('/auth/change-password', { currentPassword, newPassword });
+}
+
+export interface PublicStats {
+  totalMembers: number;
+  totalFamilies: number;
+  totalRayons: number;
+  totalStaff: number;
+}
+
+export async function fetchPublicStatsApi(): Promise<{ success: boolean; stats?: PublicStats }> {
+  return apiFetch('/public/stats');
+}
+
+/* ------------------------------------------------------------------ */
+/* Data gereja (wajib login, kecuali warta & kegiatan)                 */
+/* ------------------------------------------------------------------ */
+
 export async function fetchStatsApi() {
-  const res = await fetch(`${API_BASE}/stats`);
-  return res.json();
+  return apiFetch('/stats');
 }
 
 export async function fetchMembersApi(params?: { query?: string; rayonId?: string; categorialId?: string; status?: string }) {
@@ -41,273 +143,172 @@ export async function fetchMembersApi(params?: { query?: string; rayonId?: strin
   if (params?.rayonId) query.set('rayonId', params.rayonId);
   if (params?.categorialId) query.set('categorialId', params.categorialId);
   if (params?.status) query.set('status', params.status);
-
-  const res = await fetch(`${API_BASE}/members?${query.toString()}`);
-  return res.json();
+  return apiFetch(`/members?${query.toString()}`);
 }
 
 export async function createMemberApi(data: Partial<Member>) {
-  const res = await fetch(`${API_BASE}/members`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/members', data);
 }
 
 export async function updateMemberApi(id: string, data: Partial<Member>) {
-  const res = await fetch(`${API_BASE}/members/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return apiFetch(`/members/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 }
 
 export async function deleteMemberApi(id: string) {
-  const res = await fetch(`${API_BASE}/members/${id}`, {
-    method: 'DELETE',
-  });
-  return res.json();
+  return apiFetch(`/members/${id}`, { method: 'DELETE' });
 }
 
 export async function fetchFamiliesApi() {
-  const res = await fetch(`${API_BASE}/families`);
-  return res.json();
+  return apiFetch('/families');
 }
 
 export async function createFamilyApi(data: Partial<Family>) {
-  const res = await fetch(`${API_BASE}/families`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/families', data);
 }
 
 export async function deleteFamilyApi(id: string) {
-  const res = await fetch(`${API_BASE}/families/${id}`, { method: 'DELETE' });
-  return res.json();
+  return apiFetch(`/families/${id}`, { method: 'DELETE' });
 }
 
 export async function fetchRayonsApi() {
-  const res = await fetch(`${API_BASE}/rayons`);
-  return res.json();
+  return apiFetch('/rayons');
 }
 
 export async function fetchCategorialsApi() {
-  const res = await fetch(`${API_BASE}/categorials`);
-  return res.json();
+  return apiFetch('/categorials');
 }
 
 export async function fetchStaffApi() {
-  const res = await fetch(`${API_BASE}/staff`);
-  return res.json();
+  return apiFetch('/staff');
 }
 
 export async function createStaffApi(data: Partial<ChurchStaff>) {
-  const res = await fetch(`${API_BASE}/staff`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/staff', data);
 }
 
 export async function fetchSacramentsApi() {
-  const res = await fetch(`${API_BASE}/sacraments`);
-  return res.json();
+  return apiFetch('/sacraments');
 }
 
 export async function createBaptismApi(data: Partial<BaptismRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/baptisms`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/sacraments/baptisms', data);
 }
 
 export async function createConfirmationApi(data: Partial<ConfirmationRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/confirmations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/sacraments/confirmations', data);
 }
 
 export async function createMarriageApi(data: Partial<MarriageRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/marriages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/sacraments/marriages', data);
 }
 
 export async function fetchMutationsApi() {
-  const res = await fetch(`${API_BASE}/mutations`);
-  return res.json();
+  return apiFetch('/mutations');
 }
 
 export async function createMutationApi(data: Partial<MutationRecord>) {
-  const res = await fetch(`${API_BASE}/mutations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/mutations', data);
 }
 
 export async function fetchEventsApi() {
-  const res = await fetch(`${API_BASE}/events`);
-  return res.json();
+  return apiFetch('/events');
 }
 
 export async function createEventApi(data: Partial<ChurchEvent>) {
-  const res = await fetch(`${API_BASE}/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/events', data);
 }
 
 export async function fetchSchedulesApi() {
-  const res = await fetch(`${API_BASE}/schedules`);
-  return res.json();
+  return apiFetch('/schedules');
 }
 
 export async function createScheduleApi(data: Partial<ServiceSchedule>) {
-  const res = await fetch(`${API_BASE}/schedules`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/schedules', data);
 }
 
 export async function fetchAttendanceApi() {
-  const res = await fetch(`${API_BASE}/attendance`);
-  return res.json();
+  return apiFetch('/attendance');
 }
 
 export async function createAttendanceApi(data: Partial<AttendanceRecord>) {
-  const res = await fetch(`${API_BASE}/attendance`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/attendance', data);
 }
 
 export async function fetchFinanceApi() {
-  const res = await fetch(`${API_BASE}/finance`);
-  return res.json();
+  return apiFetch('/finance');
 }
 
 export async function createFinanceApi(data: Partial<FinancialTransaction>) {
-  const res = await fetch(`${API_BASE}/finance`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/finance', data);
 }
 
 export async function fetchDocumentsApi() {
-  const res = await fetch(`${API_BASE}/documents`);
-  return res.json();
+  return apiFetch('/documents');
 }
 
 export async function createDocumentApi(data: Partial<DocumentRecord>) {
-  const res = await fetch(`${API_BASE}/documents`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/documents', data);
 }
 
 export async function fetchAnnouncementsApi() {
-  const res = await fetch(`${API_BASE}/announcements`);
-  return res.json();
+  return apiFetch('/announcements');
 }
 
 export async function createAnnouncementApi(data: Partial<Announcement>) {
-  const res = await fetch(`${API_BASE}/announcements`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/announcements', data);
 }
 
 export async function fetchCorrectionsApi() {
-  const res = await fetch(`${API_BASE}/corrections`);
-  return res.json();
+  return apiFetch('/corrections');
 }
 
 export async function createCorrectionApi(data: { memberId: string; memberName: string; details: string }) {
-  const res = await fetch(`${API_BASE}/corrections`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return postJson('/corrections', data);
 }
 
 export async function updateCorrectionStatusApi(id: string, status: string, adminNotes: string) {
-  const res = await fetch(`${API_BASE}/corrections/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, adminNotes }),
-  });
-  return res.json();
+  return apiFetch(`/corrections/${id}`, { method: 'PUT', body: JSON.stringify({ status, adminNotes }) });
 }
 
 export async function fetchAuditLogsApi() {
-  const res = await fetch(`${API_BASE}/audit-logs`);
-  return res.json();
+  return apiFetch('/audit-logs');
 }
 
 export async function importMembersApi(members: Partial<Member>[]) {
-  const res = await fetch(`${API_BASE}/import/members`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ members }),
-  });
-  return res.json();
+  return postJson('/import/members', { members });
 }
 
 export async function fetchBirthdaysApi() {
-  const res = await fetch(`${API_BASE}/members/birthdays`);
-  return res.json();
+  return apiFetch('/members/birthdays');
 }
 
-export async function emptyDatabaseApi(keepAdmin: boolean = true, userRole: string = 'Super Admin') {
-  const res = await fetch(`${API_BASE}/database/empty`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-user-role': userRole,
-    },
-    body: JSON.stringify({ keepAdmin, userRole }),
+/** Unduh berkas cadangan database (khusus Super Admin & Admin Gereja). */
+export async function downloadBackupApi(): Promise<void> {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/backup`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  return res.json();
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || `Gagal mengunduh cadangan (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `sysjeger_backup_gmit_betel_${new Date().toISOString().substring(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
-export async function resetSeedDataApi(userRole: string = 'Super Admin') {
-  const res = await fetch(`${API_BASE}/database/reset-seed`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-user-role': userRole,
-    },
-    body: JSON.stringify({ userRole }),
-  });
-  return res.json();
+/**
+ * Kosongkan database. Peran Super Admin diverifikasi server dari token sesi;
+ * parameter userRole dipertahankan hanya demi kompatibilitas pemanggil lama.
+ */
+export async function emptyDatabaseApi(keepAdmin: boolean = true, _userRole: string = 'Super Admin') {
+  return postJson('/database/empty', { keepAdmin });
 }
 
-
+export async function resetSeedDataApi(_userRole: string = 'Super Admin') {
+  return postJson('/database/reset-seed', {});
+}

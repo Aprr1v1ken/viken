@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb, emptyAllDatabaseTables, resetToSeedData } from './db.ts';
+import { authGate, hashPassword, requireRole, signToken, verifyPassword } from './auth.ts';
 import {
   generateMemberNo,
   generateFamilyNo,
@@ -11,6 +12,48 @@ import {
 import type { Member, Family, FinancialTransaction } from '../src/types/index.ts';
 
 export const apiRouter = Router();
+
+// Seluruh rute API wajib login, kecuali daftar rute publik pada server/auth.ts
+// (login, warta, kegiatan, statistik ringkas, dan health-check untuk halaman web publik).
+apiRouter.use(authGate);
+
+apiRouter.get('/health', (_req, res) => {
+  res.json({ success: true, service: 'SYSJEGER V2.0', status: 'ok', time: new Date().toISOString() });
+});
+
+// Statistik ringkas tanpa data pribadi — aman ditampilkan di web publik.
+apiRouter.get('/public/stats', (_req, res) => {
+  const db = getDb();
+  const count = (sql: string) => (db.prepare(sql).get() as { count: number }).count;
+  res.json({
+    success: true,
+    stats: {
+      totalMembers: count("SELECT count(*) as count FROM members WHERE status = 'Aktif'"),
+      totalFamilies: count('SELECT count(*) as count FROM families'),
+      totalRayons: count('SELECT count(*) as count FROM rayons'),
+      totalStaff: count("SELECT count(*) as count FROM church_staff WHERE status = 'Aktif'"),
+    },
+  });
+});
+
+// Peran pelayan (selain warga Jemaat biasa) — berhak mengelola data gereja.
+const STAFF_ROLES = ['Super Admin', 'Admin Gereja', 'Ketua Majelis/Pendeta', 'Majelis/Rayon'];
+const staffOnly = requireRole(...STAFF_ROLES);
+const adminOnly = requireRole('Super Admin', 'Admin Gereja');
+
+/** ID anggota yang terhubung dengan akun login (untuk pembatasan data Jemaat). */
+function getOwnMemberId(userId: string): string | null {
+  const row = getDb().prepare('SELECT member_id FROM users WHERE id = ?').get(userId) as any;
+  return row?.member_id || null;
+}
+
+/** ID keluarga dari akun login Jemaat. */
+function getOwnFamilyId(userId: string): string | null {
+  const memberId = getOwnMemberId(userId);
+  if (!memberId) return null;
+  const row = getDb().prepare('SELECT family_id FROM members WHERE id = ?').get(memberId) as any;
+  return row?.family_id || null;
+}
 
 // Log audit action helper
 function addAuditLog(userId: string, userName: string, action: string, module: string, details: string) {
@@ -27,20 +70,52 @@ function addAuditLog(userId: string, userName: string, action: string, module: s
 
 // 1. Auth Login
 apiRouter.post('/auth/login', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ success: false, message: 'Username dan kata sandi wajib diisi' });
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ? AND status = \'Aktif\'').get(username, password) as any;
+  const user = db.prepare('SELECT * FROM users WHERE username = ? AND status = \'Aktif\'').get(String(username).trim()) as any;
 
-  if (!user) {
+  const check = user ? verifyPassword(String(password), user.password_hash) : { ok: false, needsRehash: false };
+  if (!user || !check.ok) {
     return res.status(401).json({ success: false, message: 'Nama pengguna atau kata sandi salah' });
+  }
+
+  // Tingkatkan kata sandi format lama menjadi hash pada login pertama.
+  if (check.needsRehash) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), user.id);
   }
 
   addAuditLog(user.id, user.name, 'Login Berhasil', 'Autentikasi', `Pengguna ${user.username} (${user.role}) masuk ke sistem`);
 
+  const sessionUser = {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    rayonId: user.rayon_id || undefined,
+    memberId: user.member_id || undefined,
+    phone: user.phone || undefined,
+    email: user.email || undefined,
+    status: user.status,
+  };
+
+  return res.json({
+    success: true,
+    user: sessionUser,
+    token: signToken({ id: user.id, username: user.username, name: user.name, role: user.role }),
+  });
+});
+
+// Validasi sesi tersimpan (dipakai frontend saat halaman dimuat ulang)
+apiRouter.get('/auth/me', (req, res) => {
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND status = \'Aktif\'').get(req.user!.id) as any;
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Pengguna tidak ditemukan atau sudah nonaktif' });
+  }
   return res.json({
     success: true,
     user: {
@@ -48,20 +123,46 @@ apiRouter.post('/auth/login', (req, res) => {
       username: user.username,
       name: user.name,
       role: user.role,
-      rayonId: user.rayon_id,
-      memberId: user.member_id,
-      phone: user.phone,
-      email: user.email,
+      rayonId: user.rayon_id || undefined,
+      memberId: user.member_id || undefined,
+      phone: user.phone || undefined,
+      email: user.email || undefined,
       status: user.status,
     },
-    token: `sysjeger-session-${user.id}-${Date.now()}`,
   });
+});
+
+// Ganti kata sandi pengguna yang sedang masuk
+apiRouter.post('/auth/change-password', (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Kata sandi saat ini dan kata sandi baru wajib diisi' });
+  }
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ success: false, message: 'Kata sandi baru minimal 8 karakter' });
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user!.id) as any;
+  if (!user || !verifyPassword(String(currentPassword), user.password_hash).ok) {
+    return res.status(401).json({ success: false, message: 'Kata sandi saat ini salah' });
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(newPassword)), user.id);
+  addAuditLog(user.id, user.name, 'Ganti Kata Sandi', 'Autentikasi', `Pengguna ${user.username} memperbarui kata sandinya`);
+  return res.json({ success: true, message: 'Kata sandi berhasil diperbarui. Gunakan kata sandi baru pada login berikutnya.' });
 });
 
 // 2. Members CRUD
 apiRouter.get('/members', (req, res) => {
   const db = getDb();
   const { query, rayonId, categorialId, status } = req.query;
+
+  // Akun Jemaat hanya boleh melihat anggota keluarganya sendiri (Portal Jemaat).
+  const jemaatFamilyId = req.user?.role === 'Jemaat' ? getOwnFamilyId(req.user.id) : null;
+  if (req.user?.role === 'Jemaat' && !jemaatFamilyId) {
+    return res.json({ success: true, count: 0, members: [] });
+  }
 
   let sql = `
     SELECT m.*, r.name as rayon_name, c.name as categorial_group_name, f.family_no
@@ -73,6 +174,10 @@ apiRouter.get('/members', (req, res) => {
   `;
   const params: any[] = [];
 
+  if (jemaatFamilyId) {
+    sql += ' AND m.family_id = ?';
+    params.push(jemaatFamilyId);
+  }
   if (rayonId && rayonId !== 'all') {
     sql += ' AND m.rayon_id = ?';
     params.push(rayonId);
@@ -140,7 +245,7 @@ apiRouter.get('/members', (req, res) => {
   res.json({ success: true, count: members.length, members });
 });
 
-apiRouter.post('/members', (req, res) => {
+apiRouter.post('/members', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const validation = validateMemberInput(data);
@@ -187,7 +292,7 @@ apiRouter.post('/members', (req, res) => {
       data.notes || '', data.photoUrl || '', now, now
     );
 
-    addAuditLog('admin', 'Admin', 'Tambah Jemaat', 'Database Jemaat', `Menambahkan anggota jemaat baru: ${data.fullName} (${memberNo})`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Tambah Jemaat', 'Database Jemaat', `Menambahkan anggota jemaat baru: ${data.fullName} (${memberNo})`);
 
     res.json({ success: true, message: 'Data jemaat berhasil disimpan', id, memberNo });
   } catch (err: any) {
@@ -195,7 +300,7 @@ apiRouter.post('/members', (req, res) => {
   }
 });
 
-apiRouter.put('/members/:id', (req, res) => {
+apiRouter.put('/members/:id', staffOnly, (req, res) => {
   const db = getDb();
   const { id } = req.params;
   const data = req.body;
@@ -227,7 +332,7 @@ apiRouter.put('/members/:id', (req, res) => {
       now, id
     );
 
-    addAuditLog('admin', 'Admin', 'Ubah Jemaat', 'Database Jemaat', `Mengubah data anggota jemaat: ${data.fullName}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Ubah Jemaat', 'Database Jemaat', `Mengubah data anggota jemaat: ${data.fullName}`);
 
     res.json({ success: true, message: 'Data jemaat berhasil diperbarui' });
   } catch (err: any) {
@@ -235,14 +340,14 @@ apiRouter.put('/members/:id', (req, res) => {
   }
 });
 
-apiRouter.delete('/members/:id', (req, res) => {
+apiRouter.delete('/members/:id', staffOnly, (req, res) => {
   const db = getDb();
   const { id } = req.params;
   try {
     const member = db.prepare('SELECT full_name, member_no FROM members WHERE id = ?').get(id) as any;
     db.prepare('DELETE FROM members WHERE id = ?').run(id);
 
-    addAuditLog('admin', 'Admin', 'Hapus Jemaat', 'Database Jemaat', `Menghapus anggota jemaat: ${member?.full_name || id}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Hapus Jemaat', 'Database Jemaat', `Menghapus anggota jemaat: ${member?.full_name || id}`);
     res.json({ success: true, message: 'Data jemaat berhasil dihapus' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Gagal menghapus data: ' + err.message });
@@ -252,6 +357,35 @@ apiRouter.delete('/members/:id', (req, res) => {
 // 3. Families CRUD
 apiRouter.get('/families', (req, res) => {
   const db = getDb();
+  // Akun Jemaat hanya menerima kartu keluarganya sendiri.
+  if (req.user?.role === 'Jemaat') {
+    const ownFamilyId = getOwnFamilyId(req.user.id);
+    const scoped = ownFamilyId
+      ? db.prepare(`
+          SELECT f.*, r.name as rayon_name,
+            (SELECT count(*) FROM members WHERE family_id = f.id) as member_count
+          FROM families f
+          LEFT JOIN rayons r ON f.rayon_id = r.id
+          WHERE f.id = ?
+        `).all(ownFamilyId) as any[]
+      : [];
+    return res.json({
+      success: true,
+      families: scoped.map((f) => ({
+        id: f.id,
+        familyNo: f.family_no,
+        headOfFamilyName: f.head_of_family_name,
+        headOfFamilyId: f.head_of_family_id || '',
+        address: f.address,
+        rayonId: f.rayon_id,
+        rayonName: f.rayon_name || '',
+        phone: f.phone || '',
+        notes: f.notes || '',
+        createdAt: f.created_at,
+        memberCount: f.member_count,
+      })),
+    });
+  }
   const rows = db.prepare(`
     SELECT f.*, r.name as rayon_name,
       (SELECT count(*) FROM members WHERE family_id = f.id) as member_count
@@ -277,7 +411,7 @@ apiRouter.get('/families', (req, res) => {
   res.json({ success: true, count: families.length, families });
 });
 
-apiRouter.post('/families', (req, res) => {
+apiRouter.post('/families', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   if (!data.headOfFamilyName || !data.rayonId) {
@@ -295,7 +429,7 @@ apiRouter.post('/families', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, familyNo, data.headOfFamilyName, data.headOfFamilyId || null, data.address || '', data.rayonId, data.phone || '', data.notes || '', now);
 
-    addAuditLog('admin', 'Admin', 'Tambah Kartu Keluarga', 'Keluarga & KK', `Menambahkan Kartu Keluarga baru: ${data.headOfFamilyName} (${familyNo})`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Tambah Kartu Keluarga', 'Keluarga & KK', `Menambahkan Kartu Keluarga baru: ${data.headOfFamilyName} (${familyNo})`);
 
     res.json({ success: true, message: 'Kartu Keluarga berhasil ditambahkan', id, familyNo });
   } catch (err: any) {
@@ -303,12 +437,12 @@ apiRouter.post('/families', (req, res) => {
   }
 });
 
-apiRouter.delete('/families/:id', (req, res) => {
+apiRouter.delete('/families/:id', staffOnly, (req, res) => {
   const db = getDb();
   const { id } = req.params;
   try {
     db.prepare('DELETE FROM families WHERE id = ?').run(id);
-    addAuditLog('admin', 'Admin', 'Hapus Kartu Keluarga', 'Keluarga & KK', `Menghapus KK ID: ${id}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Hapus Kartu Keluarga', 'Keluarga & KK', `Menghapus KK ID: ${id}`);
     res.json({ success: true, message: 'Data KK berhasil dihapus' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Gagal menghapus KK: ' + err.message });
@@ -374,14 +508,14 @@ apiRouter.get('/staff', (req, res) => {
   }))});
 });
 
-apiRouter.post('/staff', (req, res) => {
+apiRouter.post('/staff', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'st-' + Date.now();
   try {
     db.prepare('INSERT INTO church_staff (id, member_id, name, position, period, phone, email, status) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)')
       .run(id, data.name, data.position, data.period || '2024 - 2027', data.phone || '', data.email || '', data.status || 'Aktif');
-    addAuditLog('admin', 'Admin', 'Tambah Majelis', 'Majelis & Pendeta', `Menambahkan pelayan majelis: ${data.name}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Tambah Majelis', 'Majelis & Pendeta', `Menambahkan pelayan majelis: ${data.name}`);
     res.json({ success: true, message: 'Pelayan majelis berhasil ditambahkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -389,7 +523,7 @@ apiRouter.post('/staff', (req, res) => {
 });
 
 // 6. Sacraments (Baptism, Confirmation, Marriage)
-apiRouter.get('/sacraments', (req, res) => {
+apiRouter.get('/sacraments', staffOnly, (req, res) => {
   const db = getDb();
   const baptisms = db.prepare('SELECT * FROM baptisms ORDER BY baptism_date DESC').all();
   const confirmations = db.prepare('SELECT * FROM confirmations ORDER BY confirmation_date DESC').all();
@@ -440,7 +574,7 @@ apiRouter.get('/sacraments', (req, res) => {
   });
 });
 
-apiRouter.post('/sacraments/baptisms', (req, res) => {
+apiRouter.post('/sacraments/baptisms', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'bp-' + Date.now();
@@ -457,14 +591,14 @@ apiRouter.post('/sacraments/baptisms', (req, res) => {
       db.prepare("UPDATE members SET baptism_status = 'Sudah', baptism_date = ? WHERE id = ?").run(data.baptismDate, data.memberId);
     }
 
-    addAuditLog('admin', 'Admin', 'Catat Sakramen Baptis', 'Sakramen & Peristiwa', `Mencatat baptisan kudus untuk: ${data.memberName}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Sakramen Baptis', 'Sakramen & Peristiwa', `Mencatat baptisan kudus untuk: ${data.memberName}`);
     res.json({ success: true, message: 'Data baptisan berhasil dicatat' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-apiRouter.post('/sacraments/confirmations', (req, res) => {
+apiRouter.post('/sacraments/confirmations', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'cf-' + Date.now();
@@ -480,14 +614,14 @@ apiRouter.post('/sacraments/confirmations', (req, res) => {
       db.prepare("UPDATE members SET confirmation_status = 'Sudah', confirmation_date = ? WHERE id = ?").run(data.confirmationDate, data.memberId);
     }
 
-    addAuditLog('admin', 'Admin', 'Catat Peneguhan Sidi', 'Sakramen & Peristiwa', `Mencatat peneguhan sidi untuk: ${data.memberName}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Peneguhan Sidi', 'Sakramen & Peristiwa', `Mencatat peneguhan sidi untuk: ${data.memberName}`);
     res.json({ success: true, message: 'Data peneguhan sidi berhasil dicatat' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-apiRouter.post('/sacraments/marriages', (req, res) => {
+apiRouter.post('/sacraments/marriages', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'mr-' + Date.now();
@@ -506,7 +640,7 @@ apiRouter.post('/sacraments/marriages', (req, res) => {
       db.prepare("UPDATE members SET marriage_church_status = 'Sudah', marriage_date = ? WHERE id = ?").run(data.blessingDate, data.brideId);
     }
 
-    addAuditLog('admin', 'Admin', 'Catat Nikah Kudus', 'Sakramen & Peristiwa', `Mencatat pemberkatan nikah kudus: ${data.groomName} & ${data.brideName}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Nikah Kudus', 'Sakramen & Peristiwa', `Mencatat pemberkatan nikah kudus: ${data.groomName} & ${data.brideName}`);
     res.json({ success: true, message: 'Data pernikahan gerejawi berhasil dicatat' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -514,7 +648,7 @@ apiRouter.post('/sacraments/marriages', (req, res) => {
 });
 
 // 7. Mutations
-apiRouter.get('/mutations', (req, res) => {
+apiRouter.get('/mutations', staffOnly, (req, res) => {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM member_mutations ORDER BY request_date DESC').all() as any[];
   res.json({
@@ -539,7 +673,7 @@ apiRouter.get('/mutations', (req, res) => {
   });
 });
 
-apiRouter.post('/mutations', (req, res) => {
+apiRouter.post('/mutations', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'mut-' + Date.now();
@@ -565,7 +699,7 @@ apiRouter.post('/mutations', (req, res) => {
       db.prepare("UPDATE members SET rayon_id = ? WHERE id = ?").run(data.toRayonId, data.memberId);
     }
 
-    addAuditLog('admin', 'Admin', 'Catat Mutasi Anggota', 'Mutasi Jemaat', `Mencatat mutasi ${data.mutationType} untuk: ${data.memberName}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Mutasi Anggota', 'Mutasi Jemaat', `Mencatat mutasi ${data.mutationType} untuk: ${data.memberName}`);
     res.json({ success: true, message: 'Mutasi jemaat berhasil dicatat dan diproses' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -592,7 +726,7 @@ apiRouter.get('/events', (req, res) => {
   });
 });
 
-apiRouter.post('/events', (req, res) => {
+apiRouter.post('/events', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'ev-' + Date.now();
@@ -601,7 +735,7 @@ apiRouter.post('/events', (req, res) => {
       INSERT INTO events (id, title, category, start_time, end_time, location, pic_name, description, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, data.title, data.category, data.startTime, data.endTime, data.location, data.picName, data.description || '', data.status || 'Terjadwal');
-    addAuditLog('admin', 'Admin', 'Tambah Jadwal Kegiatan', 'Ibadah & Kegiatan', `Membuat kegiatan baru: ${data.title}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Tambah Jadwal Kegiatan', 'Ibadah & Kegiatan', `Membuat kegiatan baru: ${data.title}`);
     res.json({ success: true, message: 'Kegiatan berhasil dijadwalkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -631,7 +765,7 @@ apiRouter.get('/schedules', (req, res) => {
   });
 });
 
-apiRouter.post('/schedules', (req, res) => {
+apiRouter.post('/schedules', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'sch-' + Date.now();
@@ -644,7 +778,7 @@ apiRouter.post('/schedules', (req, res) => {
       data.deaconDuty, data.songLeader, data.musicians, data.multimediaOperator, data.usher,
       data.bibleReader, data.notes || ''
     );
-    addAuditLog('admin', 'Admin', 'Buat Jadwal Petugas Ibadah', 'Jadwal Pelayanan', `Membuat jadwal petugas kebaktian: ${data.serviceName} (${data.serviceDate})`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Buat Jadwal Petugas Ibadah', 'Jadwal Pelayanan', `Membuat jadwal petugas kebaktian: ${data.serviceName} (${data.serviceDate})`);
     res.json({ success: true, message: 'Jadwal petugas ibadah berhasil disimpan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -652,7 +786,7 @@ apiRouter.post('/schedules', (req, res) => {
 });
 
 // 9. Attendance
-apiRouter.get('/attendance', (req, res) => {
+apiRouter.get('/attendance', staffOnly, (req, res) => {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM attendance_records ORDER BY date DESC').all() as any[];
   res.json({
@@ -672,7 +806,7 @@ apiRouter.get('/attendance', (req, res) => {
   });
 });
 
-apiRouter.post('/attendance', (req, res) => {
+apiRouter.post('/attendance', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'att-' + Date.now();
@@ -686,7 +820,7 @@ apiRouter.post('/attendance', (req, res) => {
       INSERT INTO attendance_records (id, event_id, event_title, date, male_count, female_count, children_count, total_count, notes, recorded_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, data.eventId || null, data.eventTitle, data.date, male, female, children, total, data.notes || '', data.recordedBy || 'Tata Usaha');
-    addAuditLog('admin', 'Admin', 'Catat Absensi Ibadah', 'Absensi & Kehadiran', `Mencatat kehadiran ${total} jiwa pada ${data.eventTitle}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Absensi Ibadah', 'Absensi & Kehadiran', `Mencatat kehadiran ${total} jiwa pada ${data.eventTitle}`);
     res.json({ success: true, message: 'Absensi ibadah berhasil dicatat' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -694,7 +828,7 @@ apiRouter.post('/attendance', (req, res) => {
 });
 
 // 10. Financial Transactions
-apiRouter.get('/finance', (req, res) => {
+apiRouter.get('/finance', staffOnly, (req, res) => {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM financial_transactions ORDER BY tx_date DESC, id DESC').all() as any[];
   const transactions: FinancialTransaction[] = rows.map(t => ({
@@ -727,7 +861,7 @@ apiRouter.get('/finance', (req, res) => {
   });
 });
 
-apiRouter.post('/finance', (req, res) => {
+apiRouter.post('/finance', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'tx-' + Date.now();
@@ -740,7 +874,7 @@ apiRouter.post('/finance', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, txNo, data.txDate, data.type, data.category, amount, data.description, data.recordedBy || 'Bendahara Jemaat');
 
-    addAuditLog('admin', 'Admin', 'Catat Transaksi Keuangan', 'Keuangan Kas Gereja', `Mencatat ${data.type} sebesar Rp ${amount.toLocaleString('id-ID')} untuk ${data.category}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Catat Transaksi Keuangan', 'Keuangan Kas Gereja', `Mencatat ${data.type} sebesar Rp ${amount.toLocaleString('id-ID')} untuk ${data.category}`);
     res.json({ success: true, message: 'Transaksi kas gereja berhasil dicatat' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -748,7 +882,7 @@ apiRouter.post('/finance', (req, res) => {
 });
 
 // 11. Digital Documents
-apiRouter.get('/documents', (req, res) => {
+apiRouter.get('/documents', staffOnly, (req, res) => {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM documents ORDER BY upload_date DESC').all() as any[];
   res.json({
@@ -767,7 +901,7 @@ apiRouter.get('/documents', (req, res) => {
   });
 });
 
-apiRouter.post('/documents', (req, res) => {
+apiRouter.post('/documents', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'doc-' + Date.now();
@@ -780,7 +914,7 @@ apiRouter.post('/documents', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, docNo, data.title, data.category, data.memberId || null, data.fileName || `${data.title.replace(/\s+/g, '_')}.pdf`, data.fileSize || '1.2 MB', now, data.accessLevel || 'Publik');
 
-    addAuditLog('admin', 'Admin', 'Unggah Dokumen Digital', 'Dokumen & Arsip', `Menyimpan arsip dokumen: ${data.title}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Unggah Dokumen Digital', 'Dokumen & Arsip', `Menyimpan arsip dokumen: ${data.title}`);
     res.json({ success: true, message: 'Dokumen digital berhasil diarsipkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -805,7 +939,7 @@ apiRouter.get('/announcements', (req, res) => {
   });
 });
 
-apiRouter.post('/announcements', (req, res) => {
+apiRouter.post('/announcements', staffOnly, (req, res) => {
   const db = getDb();
   const data = req.body;
   const id = 'an-' + Date.now();
@@ -817,7 +951,7 @@ apiRouter.post('/announcements', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, data.title, data.date || now, data.category || 'Warta Ibadah', data.content, data.author || 'Sekretariat Majelis', data.isImportant ? 1 : 0);
 
-    addAuditLog('admin', 'Admin', 'Terbitkan Warta', 'Warta & Pengumuman', `Menerbitkan warta jemaat: ${data.title}`);
+    addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Terbitkan Warta', 'Warta & Pengumuman', `Menerbitkan warta jemaat: ${data.title}`);
     res.json({ success: true, message: 'Warta jemaat berhasil diterbitkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -827,7 +961,11 @@ apiRouter.post('/announcements', (req, res) => {
 // 13. Data Correction Requests (from Jemaat Portal)
 apiRouter.get('/corrections', (req, res) => {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM data_correction_requests ORDER BY request_date DESC').all() as any[];
+  // Akun Jemaat hanya melihat pengajuan koreksi datanya sendiri.
+  const ownMemberId = req.user?.role === 'Jemaat' ? getOwnMemberId(req.user.id) : null;
+  const rows = (req.user?.role === 'Jemaat'
+    ? db.prepare('SELECT * FROM data_correction_requests WHERE member_id = ? ORDER BY request_date DESC').all(ownMemberId || '')
+    : db.prepare('SELECT * FROM data_correction_requests ORDER BY request_date DESC').all()) as any[];
   res.json({
     success: true,
     corrections: rows.map(c => ({
@@ -845,6 +983,16 @@ apiRouter.get('/corrections', (req, res) => {
 apiRouter.post('/corrections', (req, res) => {
   const db = getDb();
   const data = req.body;
+  // Akun Jemaat hanya boleh mengajukan koreksi untuk dirinya sendiri.
+  if (req.user?.role === 'Jemaat') {
+    const ownMemberId = getOwnMemberId(req.user.id);
+    if (!ownMemberId) {
+      return res.status(403).json({ success: false, message: 'Akun Anda belum terhubung dengan data anggota jemaat.' });
+    }
+    data.memberId = ownMemberId;
+    const own = db.prepare('SELECT full_name FROM members WHERE id = ?').get(ownMemberId) as any;
+    data.memberName = own?.full_name || req.user.name;
+  }
   const id = 'cr-' + Date.now();
   const now = new Date().toISOString().substring(0, 10);
 
@@ -861,7 +1009,7 @@ apiRouter.post('/corrections', (req, res) => {
   }
 });
 
-apiRouter.put('/corrections/:id', (req, res) => {
+apiRouter.put('/corrections/:id', staffOnly, (req, res) => {
   const db = getDb();
   const { id } = req.params;
   const { status, adminNotes } = req.body;
@@ -875,7 +1023,7 @@ apiRouter.put('/corrections/:id', (req, res) => {
 });
 
 // 14. Dashboard Statistics
-apiRouter.get('/stats', (req, res) => {
+apiRouter.get('/stats', staffOnly, (req, res) => {
   const db = getDb();
 
   const membersRows = db.prepare(`
@@ -964,7 +1112,7 @@ apiRouter.get('/stats', (req, res) => {
 });
 
 // 14b. Birthday Members List
-apiRouter.get('/members/birthdays', (req, res) => {
+apiRouter.get('/members/birthdays', staffOnly, (req, res) => {
   const db = getDb();
   const rows = db.prepare(`
     SELECT m.*, r.name as rayon_name, c.name as categorial_group_name
@@ -1015,14 +1163,25 @@ apiRouter.get('/members/birthdays', (req, res) => {
 });
 
 // 15. Audit Logs
-apiRouter.get('/audit-logs', (req, res) => {
+apiRouter.get('/audit-logs', requireRole('Super Admin', 'Admin Gereja', 'Ketua Majelis/Pendeta'), (req, res) => {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50').all();
-  res.json({ success: true, logs: rows });
+  const rows = db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50').all() as any[];
+  res.json({
+    success: true,
+    logs: rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      userName: r.user_name,
+      action: r.action,
+      module: r.module,
+      details: r.details,
+      timestamp: r.timestamp,
+    })),
+  });
 });
 
 // 16. Import Batch
-apiRouter.post('/import/members', (req, res) => {
+apiRouter.post('/import/members', adminOnly, (req, res) => {
   const db = getDb();
   const { members } = req.body;
 
@@ -1084,7 +1243,7 @@ apiRouter.post('/import/members', (req, res) => {
     }
   }
 
-  addAuditLog('admin', 'Admin', 'Impor Data Jemaat', 'Impor & Ekspor', `Berhasil mengimpor ${successCount} data jemaat. Gagal: ${errors.length}`);
+  addAuditLog(req.user?.id || 'admin', req.user?.name || 'Admin', 'Impor Data Jemaat', 'Impor & Ekspor', `Berhasil mengimpor ${successCount} data jemaat. Gagal: ${errors.length}`);
 
   res.json({
     success: true,
@@ -1094,8 +1253,8 @@ apiRouter.post('/import/members', (req, res) => {
   });
 });
 
-// 17. Backup Database (Snapshot)
-apiRouter.get('/backup', (req, res) => {
+// 17. Backup Database (Snapshot) — khusus Super Admin & Admin Gereja
+apiRouter.get('/backup', adminOnly, (req, res) => {
   const db = getDb();
   const tables = [
     'users', 'rayons', 'categorial_groups', 'families', 'members',
@@ -1106,10 +1265,12 @@ apiRouter.get('/backup', (req, res) => {
 
   const backupData: Record<string, any[]> = {};
   for (const t of tables) {
-    backupData[t] = db.prepare(`SELECT * FROM ${t}`).all();
+    backupData[t] = db.prepare(`SELECT * FROM ${t}`).all() as any[];
   }
+  // Jangan pernah menyertakan hash kata sandi pada berkas cadangan.
+  backupData.users = (backupData.users || []).map(({ password_hash: _ignored, ...safeUser }: any) => safeUser);
 
-  addAuditLog('admin', 'Admin', 'Pencadangan Database', 'Backup & Restore', `Mengunduh berkas cadangan database SYSJEGER GMIT Betel Fuimelang`);
+  addAuditLog(req.user!.id, req.user!.name, 'Pencadangan Database', 'Backup & Restore', `Mengunduh berkas cadangan database SYSJEGER GMIT Betel Fuimelang`);
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename=sysjeger_backup_gmit_betel_${new Date().toISOString().substring(0, 10)}.json`);
@@ -1121,20 +1282,12 @@ apiRouter.get('/backup', (req, res) => {
   });
 });
 
-// 18. Empty Database Tables (Super Admin Only)
-apiRouter.post('/database/empty', (req, res) => {
-  const role = (req.headers['x-user-role'] as string) || req.body?.userRole;
-  if (role !== 'Super Admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Akses ditolak: Hanya pengguna dengan hak akses Super Admin yang diizinkan untuk mengosongkan seluruh database.',
-    });
-  }
-
+// 18. Empty Database Tables (Super Admin Only — peran diverifikasi dari token sesi)
+apiRouter.post('/database/empty', requireRole('Super Admin'), (req, res) => {
   const { keepAdmin = true } = req.body || {};
   try {
     emptyAllDatabaseTables(keepAdmin);
-    addAuditLog('superadmin', 'Super Admin', 'Kosongkan Database', 'Pemeliharaan', 'Super Admin telah mengosongkan seluruh data jemaat, keluarga, dan transaksi.');
+    addAuditLog(req.user!.id, req.user!.name, 'Kosongkan Database', 'Pemeliharaan', 'Super Admin telah mengosongkan seluruh data jemaat, keluarga, dan transaksi.');
     res.json({
       success: true,
       message: 'Seluruh data jemaat, keluarga, sakramen, kegiatan, dan keuangan telah berhasil dikosongkan dari database oleh Super Admin.',
@@ -1145,19 +1298,11 @@ apiRouter.post('/database/empty', (req, res) => {
   }
 });
 
-// 19. Reset Database to Initial Seed (Super Admin Only)
-apiRouter.post('/database/reset-seed', (req, res) => {
-  const role = (req.headers['x-user-role'] as string) || req.body?.userRole;
-  if (role !== 'Super Admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Akses ditolak: Hanya pengguna dengan hak akses Super Admin yang diizinkan untuk mereset seluruh database.',
-    });
-  }
-
+// 19. Reset Database to Initial Seed (Super Admin Only — peran diverifikasi dari token sesi)
+apiRouter.post('/database/reset-seed', requireRole('Super Admin'), (req, res) => {
   try {
     resetToSeedData();
-    addAuditLog('superadmin', 'Super Admin', 'Reset Data Awal', 'Pemeliharaan', 'Super Admin memulihkan database ke data awal percontohan GMIT Betel Fuimelang.');
+    addAuditLog(req.user!.id, req.user!.name, 'Reset Data Awal', 'Pemeliharaan', 'Super Admin memulihkan database ke data awal percontohan GMIT Betel Fuimelang.');
     res.json({
       success: true,
       message: 'Database berhasil di-reset dan dipulihkan dengan data awal percontohan jemaat GMIT Betel Fuimelang oleh Super Admin.',

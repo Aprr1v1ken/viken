@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { IMAGES } from '../assets/images.ts';
 import { X, Printer, IdCard, Calendar, MapPin, Award, BookOpen, User, Phone, Mail, Palette, Check } from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../utils/church-logic.ts';
 import type { Member, CardColorThemeId } from '../types/index.ts';
@@ -259,7 +260,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             {/* Watermark Crest */}
             <div className="absolute right-4 -bottom-6 opacity-10 pointer-events-none w-48 h-48">
               <img
-                src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+                src={IMAGES.crest}
                 alt="GMIT"
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
@@ -270,7 +271,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-3 mb-4`}>
               <div className="flex items-center gap-3">
                 <img
-                  src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+                  src={IMAGES.crest}
                   alt="GMIT Logo"
                   className="w-10 h-10 rounded-full border border-amber-400/60 object-cover shadow-sm shrink-0"
                   referrerPolicy="no-referrer"

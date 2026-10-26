@@ -3,35 +3,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
 import { PublicLanding } from './components/PublicLanding.tsx';
-import { MemberFormModal } from './components/MemberFormModal.tsx';
-import { MemberDetailModal } from './components/MemberDetailModal.tsx';
-import { FamilyModal } from './components/FamilyModal.tsx';
-import { SacramentModal } from './components/SacramentModal.tsx';
-import { ImportModal } from './components/ImportModal.tsx';
-import { PrintReportModal } from './components/PrintReportModal.tsx';
+
+// Komponen khusus dashboard dimuat secara lazy (code-splitting) agar
+// pengunjung situs web publik tidak perlu mengunduh seluruh kode admin —
+// halaman depan gereja tetap ringan pada jaringan yang lambat.
+const lazyNamed = <T extends Record<string, React.ComponentType<any>>>(load: () => Promise<T>, name: keyof T) =>
+  lazy(() => load().then((m) => ({ default: m[name] })));
+
+const ChangePasswordModal = lazyNamed(() => import('./components/ChangePasswordModal.tsx'), 'ChangePasswordModal');
+const MemberFormModal = lazyNamed(() => import('./components/MemberFormModal.tsx'), 'MemberFormModal');
+const MemberDetailModal = lazyNamed(() => import('./components/MemberDetailModal.tsx'), 'MemberDetailModal');
+const FamilyModal = lazyNamed(() => import('./components/FamilyModal.tsx'), 'FamilyModal');
+const SacramentModal = lazyNamed(() => import('./components/SacramentModal.tsx'), 'SacramentModal');
+const ImportModal = lazyNamed(() => import('./components/ImportModal.tsx'), 'ImportModal');
+const PrintReportModal = lazyNamed(() => import('./components/PrintReportModal.tsx'), 'PrintReportModal');
 
 // Views
-import { DashboardView } from './components/views/DashboardView.tsx';
-import { MembersView } from './components/views/MembersView.tsx';
-import { FamiliesView } from './components/views/FamiliesView.tsx';
-import { RayonsView } from './components/views/RayonsView.tsx';
-import { StaffView } from './components/views/StaffView.tsx';
-import { SacramentsView } from './components/views/SacramentsView.tsx';
-import { MutationsView } from './components/views/MutationsView.tsx';
-import { EventsView } from './components/views/EventsView.tsx';
-import { AttendanceView } from './components/views/AttendanceView.tsx';
-import { FinanceView } from './components/views/FinanceView.tsx';
-import { DocumentsView } from './components/views/DocumentsView.tsx';
-import { AnnouncementsView } from './components/views/AnnouncementsView.tsx';
-import { JemaatPortalView } from './components/views/JemaatPortalView.tsx';
-import { BackupView } from './components/views/BackupView.tsx';
-import { AuditLogsView } from './components/views/AuditLogsView.tsx';
-import { ReportsView } from './components/views/ReportsView.tsx';
+const DashboardView = lazyNamed(() => import('./components/views/DashboardView.tsx'), 'DashboardView');
+const MembersView = lazyNamed(() => import('./components/views/MembersView.tsx'), 'MembersView');
+const FamiliesView = lazyNamed(() => import('./components/views/FamiliesView.tsx'), 'FamiliesView');
+const RayonsView = lazyNamed(() => import('./components/views/RayonsView.tsx'), 'RayonsView');
+const StaffView = lazyNamed(() => import('./components/views/StaffView.tsx'), 'StaffView');
+const SacramentsView = lazyNamed(() => import('./components/views/SacramentsView.tsx'), 'SacramentsView');
+const MutationsView = lazyNamed(() => import('./components/views/MutationsView.tsx'), 'MutationsView');
+const EventsView = lazyNamed(() => import('./components/views/EventsView.tsx'), 'EventsView');
+const AttendanceView = lazyNamed(() => import('./components/views/AttendanceView.tsx'), 'AttendanceView');
+const FinanceView = lazyNamed(() => import('./components/views/FinanceView.tsx'), 'FinanceView');
+const DocumentsView = lazyNamed(() => import('./components/views/DocumentsView.tsx'), 'DocumentsView');
+const AnnouncementsView = lazyNamed(() => import('./components/views/AnnouncementsView.tsx'), 'AnnouncementsView');
+const JemaatPortalView = lazyNamed(() => import('./components/views/JemaatPortalView.tsx'), 'JemaatPortalView');
+const BackupView = lazyNamed(() => import('./components/views/BackupView.tsx'), 'BackupView');
+const AuditLogsView = lazyNamed(() => import('./components/views/AuditLogsView.tsx'), 'AuditLogsView');
+const ReportsView = lazyNamed(() => import('./components/views/ReportsView.tsx'), 'ReportsView');
+
+const ViewLoading = () => (
+  <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
+    <span className="animate-pulse">Memuat halaman…</span>
+  </div>
+);
 
 import * as api from './services/api.ts';
 import type {
@@ -53,25 +67,26 @@ import type {
   DataCorrectionRequest,
   AuditLog,
   User,
-  UserRole,
 } from './types/index.ts';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User>({
-    id: 'u2',
-    username: 'admingereja',
-    name: 'Dkn. Elisabeth Lopo (Tata Usaha)',
-    role: 'Admin Gereja',
-    status: 'Aktif',
-    email: 'elisabeth.lopo@gmitbetel.id',
-  });
+  // Sesi dipulihkan dari penyimpanan browser; pengunjung baru (belum login)
+  // pertama-tama melihat situs web publik gereja, bukan dashboard admin.
+  const [currentUser, setCurrentUser] = useState<User | null>(() =>
+    api.getAuthToken() ? api.getStoredUser() : null
+  );
 
-  const [currentView, setCurrentView] = useState('dashboard');
-  const [showPublicSite, setShowPublicSite] = useState(false);
+  const [currentView, setCurrentView] = useState<string>(() =>
+    api.getStoredUser()?.role === 'Jemaat' ? 'portal' : 'dashboard'
+  );
+  const [showPublicSite, setShowPublicSite] = useState<boolean>(
+    () => !(api.getAuthToken() && api.getStoredUser())
+  );
   const [isOpenMobileSidebar, setIsOpenMobileSidebar] = useState(false);
 
   // Modals state
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showMemberFormModal, setShowMemberFormModal] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [showMemberDetailModal, setShowMemberDetailModal] = useState(false);
@@ -102,6 +117,7 @@ export default function App() {
   const [corrections, setCorrections] = useState<DataCorrectionRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [publicStats, setPublicStats] = useState<api.PublicStats | null>(null);
 
   // Load all data from API
   const loadAllData = async () => {
@@ -167,60 +183,92 @@ export default function App() {
     }
   };
 
+  // Data publik (warta, kegiatan, statistik ringkas) dimuat untuk semua pengunjung.
+  const loadPublicData = async () => {
+    try {
+      const [announcementsRes, eventsRes, publicStatsRes] = await Promise.all([
+        api.fetchAnnouncementsApi(),
+        api.fetchEventsApi(),
+        api.fetchPublicStatsApi(),
+      ]);
+      if (announcementsRes?.announcements) setAnnouncements(announcementsRes.announcements);
+      if (eventsRes?.events) setEvents(eventsRes.events);
+      if (publicStatsRes?.stats) setPublicStats(publicStatsRes.stats);
+    } catch (err) {
+      console.error('Error fetching public data:', err);
+    }
+  };
+
   useEffect(() => {
-    loadAllData();
+    loadPublicData();
+    // Segarkan profil dari server bila ada sesi tersimpan (mis. memberId terbaru).
+    if (api.getAuthToken()) {
+      api.fetchMeApi()
+        .then((res) => {
+          if (res?.success && res.user) {
+            const token = api.getAuthToken();
+            if (token) api.setAuthSession(token, res.user);
+            setCurrentUser(res.user);
+          }
+        })
+        .catch(() => undefined);
+    }
+    // Bila server menolak sesi (401), kembalikan pengguna ke web publik + login.
+    api.setUnauthorizedHandler(() => {
+      setCurrentUser(null);
+      setShowPublicSite(true);
+      setShowLoginModal(true);
+    });
+    return () => api.setUnauthorizedHandler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Quick switch role handler
-  const handleSwitchRole = (role: UserRole) => {
-    if (role === 'Super Admin') {
-      setCurrentUser({
-        id: 'u1',
-        username: 'superadmin',
-        name: 'Super Admin SYSJEGER',
-        role: 'Super Admin',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Admin Gereja') {
-      setCurrentUser({
-        id: 'u2',
-        username: 'admingereja',
-        name: 'Dkn. Elisabeth Lopo (Tata Usaha)',
-        role: 'Admin Gereja',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Ketua Majelis/Pendeta') {
-      setCurrentUser({
-        id: 'u3',
-        username: 'pendeta',
-        name: 'Pdt. Abraham M. Tefa, S.Th (Ketua Majelis)',
-        role: 'Ketua Majelis/Pendeta',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Majelis/Rayon') {
-      setCurrentUser({
-        id: 'u4',
-        username: 'majelisrayon1',
-        name: 'Pnt. Yulius Banamtuan (Penatua R1)',
-        role: 'Majelis/Rayon',
-        rayonId: 'r1',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Jemaat') {
-      setCurrentUser({
-        id: 'u5',
-        username: 'jemaat1',
-        name: 'Yohanis Tefa (Kepala Keluarga)',
-        role: 'Jemaat',
-        memberId: 'm1',
-        rayonId: 'r1',
-        status: 'Aktif',
-      });
-      setCurrentView('portal');
+  // Data lengkap gereja hanya dimuat setelah pengguna masuk.
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadAllData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  // Sesi & navigasi utama
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setShowPublicSite(false);
+    setShowLoginModal(false);
+    setCurrentView(user.role === 'Jemaat' ? 'portal' : 'dashboard');
+  };
+
+  const handleLogout = () => {
+    api.clearAuthSession();
+    setCurrentUser(null);
+    setShowPublicSite(true);
+    setCurrentView('dashboard');
+    setIsOpenMobileSidebar(false);
+    // Bersihkan data internal dari memori; warta & kegiatan publik dipertahankan.
+    setMembers([]);
+    setFamilies([]);
+    setRayons([]);
+    setCategorials([]);
+    setStaff([]);
+    setBaptisms([]);
+    setConfirmations([]);
+    setMarriages([]);
+    setMutations([]);
+    setSchedules([]);
+    setAttendance([]);
+    setTransactions([]);
+    setDocuments([]);
+    setCorrections([]);
+    setAuditLogs([]);
+    setStats(null);
+  };
+
+  const handleEnterApp = () => {
+    if (currentUser) {
+      setShowPublicSite(false);
+    } else {
+      setShowLoginModal(true);
     }
   };
 
@@ -312,7 +360,7 @@ export default function App() {
 
   // Correction request handler
   const handleSubmitCorrection = async (details: string) => {
-    const mem = members.find((m) => m.id === currentUser.memberId) || members[0];
+    const mem = members.find((m) => m.id === currentUser?.memberId) || members[0];
     if (mem) {
       await api.createCorrectionApi({
         memberId: mem.id,
@@ -331,18 +379,27 @@ export default function App() {
   };
 
   // Active member for Portal
-  const activePortalMember = members.find((m) => m.id === currentUser.memberId) || members[0] || null;
+  const activePortalMember = members.find((m) => m.id === currentUser?.memberId) || members[0] || null;
   const activePortalFamily = activePortalMember ? families.find((f) => f.id === activePortalMember.familyId) || null : null;
   const activePortalFamilyMembers = activePortalFamily ? members.filter((m) => m.familyId === activePortalFamily.id) : [];
 
-  // Public website view
-  if (showPublicSite) {
+  // Public website view — juga menjadi gerbang bila belum ada sesi login.
+  if (showPublicSite || !currentUser) {
     return (
-      <PublicLanding
-        onEnterApp={() => setShowPublicSite(false)}
-        announcements={announcements}
-        events={events}
-      />
+      <>
+        <PublicLanding
+          onEnterApp={handleEnterApp}
+          isLoggedIn={!!currentUser}
+          announcements={announcements}
+          events={events}
+          publicStats={publicStats}
+        />
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      </>
     );
   }
 
@@ -353,7 +410,7 @@ export default function App() {
         currentView={currentView}
         onSelectView={(v) => setCurrentView(v)}
         currentUser={currentUser}
-        onLogout={() => setShowLoginModal(true)}
+        onLogout={handleLogout}
         onOpenPublicSite={() => setShowPublicSite(true)}
         isOpenMobile={isOpenMobileSidebar}
         onCloseMobile={() => setIsOpenMobileSidebar(false)}
@@ -366,10 +423,13 @@ export default function App() {
           currentUser={currentUser}
           onOpenMobileSidebar={() => setIsOpenMobileSidebar(true)}
           onOpenPublicSite={() => setShowPublicSite(true)}
-          onSwitchRole={handleSwitchRole}
+          onLogout={handleLogout}
+          onOpenLogin={() => setShowLoginModal(true)}
+          onOpenChangePassword={() => setShowChangePasswordModal(true)}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <Suspense fallback={<ViewLoading />}>
           {currentView === 'dashboard' && (
             <DashboardView
               stats={stats}
@@ -580,18 +640,21 @@ export default function App() {
               logs={auditLogs}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
       {/* Global Modals */}
+      <Suspense fallback={null}>
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        onLoginSuccess={(user) => {
-          setCurrentUser(user);
-          if (user.role === 'Jemaat') setCurrentView('portal');
-          else setCurrentView('dashboard');
-        }}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
+      <ChangePasswordModal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
       />
 
       <MemberFormModal
@@ -650,6 +713,7 @@ export default function App() {
         rayons={rayons}
         transactions={transactions}
       />
+      </Suspense>
     </div>
   );
 }
