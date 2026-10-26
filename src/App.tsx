@@ -41,6 +41,7 @@ const JemaatPortalView = lazyNamed(() => import('./components/views/JemaatPortal
 const BackupView = lazyNamed(() => import('./components/views/BackupView.tsx'), 'BackupView');
 const AuditLogsView = lazyNamed(() => import('./components/views/AuditLogsView.tsx'), 'AuditLogsView');
 const ReportsView = lazyNamed(() => import('./components/views/ReportsView.tsx'), 'ReportsView');
+const UsersView = lazyNamed(() => import('./components/views/UsersView.tsx'), 'UsersView');
 
 const ViewLoading = () => (
   <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
@@ -93,8 +94,10 @@ export default function App() {
   const [showMemberDetailModal, setShowMemberDetailModal] = useState(false);
   const [detailMember, setDetailMember] = useState<Member | null>(null);
   const [showFamilyModal, setShowFamilyModal] = useState(false);
+  const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [showSacramentModal, setShowSacramentModal] = useState(false);
   const [sacramentType, setSacramentType] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
+  const [editingSacrament, setEditingSacrament] = useState<any | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPrintReportModal, setShowPrintReportModal] = useState(false);
   const [reportType, setReportType] = useState<'members' | 'rayons' | 'finance' | 'sacraments' | 'attendance'>('members');
@@ -119,6 +122,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [publicStats, setPublicStats] = useState<api.PublicStats | null>(null);
+  const [users, setUsers] = useState<api.ManagedUser[]>([]);
 
   // Load all data from API
   const loadAllData = async () => {
@@ -179,6 +183,12 @@ export default function App() {
       if (announcementsRes?.announcements) setAnnouncements(announcementsRes.announcements);
       if (correctionsRes?.corrections) setCorrections(correctionsRes.corrections);
       if (auditRes?.logs) setAuditLogs(auditRes.logs);
+      if (currentUser?.role === 'Super Admin') {
+        const usersRes = await api.fetchUsersApi();
+        if (usersRes?.users) setUsers(usersRes.users);
+      } else {
+        setUsers([]);
+      }
     } catch (err) {
       console.error('Error fetching church data:', err);
     }
@@ -262,6 +272,7 @@ export default function App() {
     setDocuments([]);
     setCorrections([]);
     setAuditLogs([]);
+    setUsers([]);
     setStats(null);
   };
 
@@ -290,74 +301,92 @@ export default function App() {
 
   // Family CRUD handlers
   const handleSaveFamily = async (data: Partial<Family>) => {
-    await api.createFamilyApi(data);
+    const r = editingFamily
+      ? await api.updateFamilyApi(editingFamily.id, data)
+      : await api.createFamilyApi(data);
     await loadAllData();
+    return r;
   };
 
   const handleDeleteFamily = async (id: string) => {
-    await api.deleteFamilyApi(id);
+    const r = await api.deleteFamilyApi(id);
     await loadAllData();
+    return r;
   };
 
-  // Staff handler
-  const handleAddStaff = async (data: Partial<ChurchStaff>) => {
-    await api.createStaffApi(data);
+  // Helper: jalankan operasi tulis lalu muat ulang seluruh data
+  const runAndReload = async (fn: () => Promise<any>) => {
+    const r = await fn();
     await loadAllData();
+    return r;
   };
 
-  // Sacrament handlers
-  const handleSaveBaptism = async (data: any) => {
-    await api.createBaptismApi(data);
-    await loadAllData();
-  };
-  const handleSaveConfirmation = async (data: any) => {
-    await api.createConfirmationApi(data);
-    await loadAllData();
-  };
-  const handleSaveMarriage = async (data: any) => {
-    await api.createMarriageApi(data);
-    await loadAllData();
-  };
+  // Rayon & Kategorial
+  const handleSaveRayon = (data: Partial<Rayon>, id?: string) =>
+    runAndReload(() => (id ? api.updateRayonApi(id, data) : api.createRayonApi(data)));
+  const handleDeleteRayon = (id: string) => runAndReload(() => api.deleteRayonApi(id));
+  const handleSaveCategorial = (data: Partial<CategorialGroup>, id?: string) =>
+    runAndReload(() => (id ? api.updateCategorialApi(id, data) : api.createCategorialApi(data)));
+  const handleDeleteCategorial = (id: string) => runAndReload(() => api.deleteCategorialApi(id));
 
-  // Mutation handler
-  const handleAddMutation = async (data: Partial<MutationRecord>) => {
-    await api.createMutationApi(data);
-    await loadAllData();
-  };
+  // Staff handlers
+  const handleSaveStaff = (data: Partial<ChurchStaff>, id?: string) =>
+    runAndReload(() => (id ? api.updateStaffApi(id, data) : api.createStaffApi(data)));
+  const handleDeleteStaff = (id: string) => runAndReload(() => api.deleteStaffApi(id));
+
+  // Sacrament handlers (memakai editingSacrament untuk mode ubah)
+  const handleSaveBaptism = (data: any) =>
+    runAndReload(() => (editingSacrament ? api.updateBaptismApi(editingSacrament.id, { ...editingSacrament, ...data }) : api.createBaptismApi(data)));
+  const handleSaveConfirmation = (data: any) =>
+    runAndReload(() => (editingSacrament ? api.updateConfirmationApi(editingSacrament.id, { ...editingSacrament, ...data }) : api.createConfirmationApi(data)));
+  const handleSaveMarriage = (data: any) =>
+    runAndReload(() => (editingSacrament ? api.updateMarriageApi(editingSacrament.id, { ...editingSacrament, ...data }) : api.createMarriageApi(data)));
+  const handleDeleteBaptism = (id: string) => runAndReload(() => api.deleteBaptismApi(id));
+  const handleDeleteConfirmation = (id: string) => runAndReload(() => api.deleteConfirmationApi(id));
+  const handleDeleteMarriage = (id: string) => runAndReload(() => api.deleteMarriageApi(id));
+
+  // Mutation handlers
+  const handleSaveMutation = (data: Partial<MutationRecord>, id?: string) =>
+    runAndReload(() => (id ? api.updateMutationApi(id, data) : api.createMutationApi(data)));
+  const handleDeleteMutation = (id: string) => runAndReload(() => api.deleteMutationApi(id));
 
   // Event & Schedule handlers
-  const handleAddEvent = async (data: Partial<ChurchEvent>) => {
-    await api.createEventApi(data);
-    await loadAllData();
-  };
-  const handleAddSchedule = async (data: Partial<ServiceSchedule>) => {
-    await api.createScheduleApi(data);
-    await loadAllData();
-  };
+  const handleSaveEvent = (data: Partial<ChurchEvent>, id?: string) =>
+    runAndReload(() => (id ? api.updateEventApi(id, data) : api.createEventApi(data)));
+  const handleDeleteEvent = (id: string) => runAndReload(() => api.deleteEventApi(id));
+  const handleSaveSchedule = (data: Partial<ServiceSchedule>, id?: string) =>
+    runAndReload(() => (id ? api.updateScheduleApi(id, data) : api.createScheduleApi(data)));
+  const handleDeleteSchedule = (id: string) => runAndReload(() => api.deleteScheduleApi(id));
 
-  // Attendance handler
-  const handleAddAttendance = async (data: Partial<AttendanceRecord>) => {
-    await api.createAttendanceApi(data);
-    await loadAllData();
-  };
+  // Attendance handlers
+  const handleSaveAttendance = (data: Partial<AttendanceRecord>, id?: string) =>
+    runAndReload(() => (id ? api.updateAttendanceApi(id, data) : api.createAttendanceApi(data)));
+  const handleDeleteAttendance = (id: string) => runAndReload(() => api.deleteAttendanceApi(id));
 
-  // Finance handler
-  const handleAddFinance = async (data: Partial<FinancialTransaction>) => {
-    await api.createFinanceApi(data);
-    await loadAllData();
-  };
+  // Finance handlers
+  const handleSaveFinance = (data: Partial<FinancialTransaction>, id?: string) =>
+    runAndReload(() => (id ? api.updateFinanceApi(id, data) : api.createFinanceApi(data)));
+  const handleDeleteFinance = (id: string) => runAndReload(() => api.deleteFinanceApi(id));
 
-  // Document handler
-  const handleAddDocument = async (data: Partial<DocumentRecord>) => {
-    await api.createDocumentApi(data);
-    await loadAllData();
-  };
+  // Document handlers
+  const handleSaveDocument = (data: Partial<DocumentRecord>, id?: string) =>
+    runAndReload(() => (id ? api.updateDocumentApi(id, data) : api.createDocumentApi(data)));
+  const handleDeleteDocument = (id: string) => runAndReload(() => api.deleteDocumentApi(id));
 
-  // Announcement handler
-  const handleAddAnnouncement = async (data: Partial<Announcement>) => {
-    await api.createAnnouncementApi(data);
-    await loadAllData();
-  };
+  // Announcement handlers
+  const handleSaveAnnouncement = (data: Partial<Announcement>, id?: string) =>
+    runAndReload(() => (id ? api.updateAnnouncementApi(id, data) : api.createAnnouncementApi(data)));
+  const handleDeleteAnnouncement = (id: string) => runAndReload(() => api.deleteAnnouncementApi(id));
+
+  // Correction admin handlers
+  const handleUpdateCorrection = (id: string, status: string, adminNotes: string) =>
+    runAndReload(() => api.updateCorrectionStatusApi(id, status, adminNotes));
+  const handleDeleteCorrection = (id: string) => runAndReload(() => api.deleteCorrectionApi(id));
+
+  // User management handlers (Super Admin)
+  const handleSaveUser = (data: api.UserInput, id?: string) =>
+    runAndReload(() => (id ? api.updateUserApi(id, data) : api.createUserApi(data)));
+  const handleDeleteUser = (id: string) => runAndReload(() => api.deleteUserApi(id));
 
   // Correction request handler
   const handleSubmitCorrection = async (details: string) => {
@@ -443,13 +472,9 @@ export default function App() {
                 setEditingMember(null);
                 setShowMemberFormModal(true);
               }}
-              onOpenAddFamily={() => setShowFamilyModal(true)}
+              onOpenAddFamily={() => { setEditingFamily(null); setShowFamilyModal(true); }}
               onOpenAddFinance={() => setCurrentView('finance')}
               onOpenAddAttendance={() => setCurrentView('attendance')}
-              onSeedDemoData={async () => {
-                await api.resetSeedDataApi(currentUser?.role || 'Super Admin');
-                await loadAllData();
-              }}
             />
           )}
 
@@ -471,6 +496,9 @@ export default function App() {
                 setShowMemberDetailModal(true);
               }}
               onDeleteMember={handleDeleteMember}
+              corrections={corrections}
+              onUpdateCorrection={handleUpdateCorrection}
+              onDeleteCorrection={handleDeleteCorrection}
               onOpenImportModal={() => setShowImportModal(true)}
               onOpenPrintReport={() => {
                 setReportType('members');
@@ -484,7 +512,8 @@ export default function App() {
               families={families}
               members={members}
               rayons={rayons}
-              onOpenAddModal={() => setShowFamilyModal(true)}
+              onOpenAddModal={() => { setEditingFamily(null); setShowFamilyModal(true); }}
+              onOpenEditModal={(f) => { setEditingFamily(f); setShowFamilyModal(true); }}
               onDeleteFamily={handleDeleteFamily}
               onOpenPrintReport={() => {
                 setReportType('rayons');
@@ -502,11 +531,16 @@ export default function App() {
                 setDetailMember(m);
                 setShowMemberDetailModal(true);
               }}
+              onSaveRayon={handleSaveRayon}
+              onDeleteRayon={handleDeleteRayon}
+              onSaveCategorial={handleSaveCategorial}
+              onDeleteCategorial={handleDeleteCategorial}
             />
           )}
 
           {currentView === 'categorials' && (
             <RayonsView
+              defaultTab="categorials"
               rayons={rayons}
               categorials={categorials}
               members={members}
@@ -514,13 +548,18 @@ export default function App() {
                 setDetailMember(m);
                 setShowMemberDetailModal(true);
               }}
+              onSaveRayon={handleSaveRayon}
+              onDeleteRayon={handleDeleteRayon}
+              onSaveCategorial={handleSaveCategorial}
+              onDeleteCategorial={handleDeleteCategorial}
             />
           )}
 
           {currentView === 'staff' && (
             <StaffView
               staff={staff}
-              onAddStaff={handleAddStaff}
+              onSaveStaff={handleSaveStaff}
+              onDeleteStaff={handleDeleteStaff}
             />
           )}
 
@@ -531,17 +570,38 @@ export default function App() {
               marriages={marriages}
               members={members}
               onOpenAddBaptism={() => {
+                setEditingSacrament(null);
                 setSacramentType('baptis');
                 setShowSacramentModal(true);
               }}
               onOpenAddConfirmation={() => {
+                setEditingSacrament(null);
                 setSacramentType('sidi');
                 setShowSacramentModal(true);
               }}
               onOpenAddMarriage={() => {
+                setEditingSacrament(null);
                 setSacramentType('nikah');
                 setShowSacramentModal(true);
               }}
+              onOpenEditBaptism={(record) => {
+                setEditingSacrament(record);
+                setSacramentType('baptis');
+                setShowSacramentModal(true);
+              }}
+              onOpenEditConfirmation={(record) => {
+                setEditingSacrament(record);
+                setSacramentType('sidi');
+                setShowSacramentModal(true);
+              }}
+              onOpenEditMarriage={(record) => {
+                setEditingSacrament(record);
+                setSacramentType('nikah');
+                setShowSacramentModal(true);
+              }}
+              onDeleteBaptism={handleDeleteBaptism}
+              onDeleteConfirmation={handleDeleteConfirmation}
+              onDeleteMarriage={handleDeleteMarriage}
               onPrintCertificate={(type, record) => {
                 setReportType('sacraments');
                 setShowPrintReportModal(true);
@@ -554,7 +614,8 @@ export default function App() {
               mutations={mutations}
               members={members}
               rayons={rayons}
-              onAddMutation={handleAddMutation}
+              onSaveMutation={handleSaveMutation}
+              onDeleteMutation={handleDeleteMutation}
             />
           )}
 
@@ -562,15 +623,18 @@ export default function App() {
             <EventsView
               events={events}
               schedules={schedules}
-              onAddEvent={handleAddEvent}
-              onAddSchedule={handleAddSchedule}
+              onSaveEvent={handleSaveEvent}
+              onDeleteEvent={handleDeleteEvent}
+              onSaveSchedule={handleSaveSchedule}
+              onDeleteSchedule={handleDeleteSchedule}
             />
           )}
 
           {currentView === 'attendance' && (
             <AttendanceView
               attendance={attendance}
-              onAddAttendance={handleAddAttendance}
+              onSaveAttendance={handleSaveAttendance}
+              onDeleteAttendance={handleDeleteAttendance}
               onOpenPrintReport={() => {
                 setReportType('attendance');
                 setShowPrintReportModal(true);
@@ -581,7 +645,8 @@ export default function App() {
           {currentView === 'finance' && (
             <FinanceView
               transactions={transactions}
-              onAddTransaction={handleAddFinance}
+              onSaveTransaction={handleSaveFinance}
+              onDeleteTransaction={handleDeleteFinance}
               onOpenPrintReport={() => {
                 setReportType('finance');
                 setShowPrintReportModal(true);
@@ -592,14 +657,16 @@ export default function App() {
           {currentView === 'documents' && (
             <DocumentsView
               documents={documents}
-              onAddDocument={handleAddDocument}
+              onSaveDocument={handleSaveDocument}
+              onDeleteDocument={handleDeleteDocument}
             />
           )}
 
           {currentView === 'announcements' && (
             <AnnouncementsView
               announcements={announcements}
-              onAddAnnouncement={handleAddAnnouncement}
+              onSaveAnnouncement={handleSaveAnnouncement}
+              onDeleteAnnouncement={handleDeleteAnnouncement}
             />
           )}
 
@@ -636,6 +703,17 @@ export default function App() {
               currentUser={currentUser}
               onOpenImport={() => setShowImportModal(true)}
               onDatabaseModified={loadAllData}
+            />
+          )}
+
+          {currentView === 'users' && currentUser.role === 'Super Admin' && (
+            <UsersView
+              users={users}
+              rayons={rayons}
+              members={members}
+              currentUser={currentUser}
+              onSaveUser={handleSaveUser}
+              onDeleteUser={handleDeleteUser}
             />
           )}
 
@@ -687,15 +765,17 @@ export default function App() {
 
       <FamilyModal
         isOpen={showFamilyModal}
-        onClose={() => setShowFamilyModal(false)}
+        onClose={() => { setShowFamilyModal(false); setEditingFamily(null); }}
         onSave={handleSaveFamily}
+        family={editingFamily}
         rayons={rayons}
       />
 
       <SacramentModal
         isOpen={showSacramentModal}
         type={sacramentType}
-        onClose={() => setShowSacramentModal(false)}
+        record={editingSacrament}
+        onClose={() => { setShowSacramentModal(false); setEditingSacrament(null); }}
         members={members}
         onSaveBaptism={handleSaveBaptism}
         onSaveConfirmation={handleSaveConfirmation}

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Home, Save, AlertCircle } from 'lucide-react';
 import type { Family, Rayon } from '../types/index.ts';
 
 interface FamilyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Partial<Family>) => Promise<void>;
+  onSave: (data: Partial<Family>) => Promise<any>;
+  family?: Family | null;
   rayons: Rayon[];
 }
 
@@ -13,6 +14,7 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  family,
   rayons,
 }) => {
   const [headName, setHeadName] = useState('');
@@ -22,6 +24,17 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Isi ulang formulir setiap modal dibuka (mode tambah / ubah)
+  useEffect(() => {
+    if (!isOpen) return;
+    setHeadName(family?.headOfFamilyName || '');
+    setAddress(family?.address || 'Desa Fuimelang');
+    setRayonId(family?.rayonId || rayons[0]?.id || '');
+    setPhone(family?.phone || '');
+    setNotes(family?.notes || '');
+    setError('');
+  }, [isOpen, family]);
 
   if (!isOpen) return null;
 
@@ -35,13 +48,14 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
     setSaving(true);
     setError('');
     try {
-      await onSave({
+      const res: any = await onSave({
         headOfFamilyName: headName,
         address,
         rayonId,
         phone,
         notes,
       });
+      if (res && res.success === false) throw new Error(res.message || 'Gagal menyimpan KK');
       onClose();
     } catch (err: any) {
       setError(err.message || 'Gagal menyimpan KK');
@@ -56,7 +70,7 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
         <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#070b18]">
           <h3 className="text-base font-bold text-amber-300 flex items-center gap-2">
             <Home className="w-5 h-5 text-amber-400" />
-            <span>Tambah Kartu Keluarga (KK) Baru</span>
+            <span>{family ? 'Ubah Kartu Keluarga (KK)' : 'Tambah Kartu Keluarga (KK) Baru'}</span>
           </h3>
           <button
             onClick={onClose}
@@ -83,7 +97,7 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
               required
               value={headName}
               onChange={(e) => setHeadName(e.target.value)}
-              placeholder="Contoh: Markus Doko"
+              placeholder="Nama kepala keluarga"
               className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white focus:border-amber-400 outline-none"
             />
           </div>

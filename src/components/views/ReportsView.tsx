@@ -61,7 +61,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <span>Pusat Laporan & Format Cetak Resmi A4</span>
         </h2>
         <p className="text-xs text-slate-400 mt-0.5">
-          Seluruh laporan dilengkapi Kop Resmi Sinode GMIT Klasis Alor Barat Daya, stempel tanggal WITA, dan lembar tanda tangan Ketua Majelis Jemaat & Sekretaris
+          Seluruh laporan dilengkapi Kop Resmi Sinode GMIT Klasis Alor Tengah Utara, stempel tanggal WITA, dan lembar tanda tangan Ketua Majelis Jemaat & Sekretaris
         </p>
       </div>
 

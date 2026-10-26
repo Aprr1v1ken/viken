@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, BookOpen, Award, Heart, Save, AlertCircle } from 'lucide-react';
 import type { Member } from '../types/index.ts';
 
 interface SacramentModalProps {
   isOpen: boolean;
   type: 'baptis' | 'sidi' | 'nikah';
+  record?: any | null;
   onClose: () => void;
   members: Member[];
   onSaveBaptism: (data: any) => Promise<void>;
@@ -15,6 +16,7 @@ interface SacramentModalProps {
 export const SacramentModal: React.FC<SacramentModalProps> = ({
   isOpen,
   type,
+  record,
   onClose,
   members,
   onSaveBaptism,
@@ -23,13 +25,46 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
 }) => {
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
-  const [minister, setMinister] = useState('Pdt. Abraham M. Tefa, S.Th');
+  const [minister, setMinister] = useState('');
   const [churchPlace, setChurchPlace] = useState('Gedung Kebaktian GMIT Betel Fuimelang');
   const [certificateNo, setCertificateNo] = useState('');
   const [extraField1, setExtraField1] = useState(''); // Parent names or bible verse or groom
   const [extraField2, setExtraField2] = useState(''); // Witnesses or bride
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Isi ulang formulir setiap modal dibuka (mode tambah / ubah)
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    if (record) {
+      setSelectedMemberId(record.memberId || '');
+      setMinister(record.ministerName || '');
+      setChurchPlace(record.churchPlace || 'Gedung Kebaktian GMIT Betel Fuimelang');
+      setCertificateNo(record.certificateNo || '');
+      if (type === 'baptis') {
+        setDate(record.baptismDate || new Date().toISOString().substring(0, 10));
+        setExtraField1(record.parentNames || '');
+        setExtraField2(record.witnesses || '');
+      } else if (type === 'sidi') {
+        setDate(record.confirmationDate || new Date().toISOString().substring(0, 10));
+        setExtraField1(record.bibleVerse || '');
+        setExtraField2('');
+      } else {
+        setDate(record.blessingDate || new Date().toISOString().substring(0, 10));
+        setExtraField1(record.groomName || '');
+        setExtraField2(record.brideName || '');
+      }
+    } else {
+      setSelectedMemberId('');
+      setDate(new Date().toISOString().substring(0, 10));
+      setMinister('');
+      setChurchPlace('Gedung Kebaktian GMIT Betel Fuimelang');
+      setCertificateNo('');
+      setExtraField1('');
+      setExtraField2('');
+    }
+  }, [isOpen, record, type]);
 
   if (!isOpen) return null;
 
@@ -74,7 +109,7 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
           churchPlace,
           ministerName: minister,
           certificateNo: certificateNo || `SN-GMIT-BF/${new Date().getFullYear()}/${Date.now().toString().slice(-3)}`,
-          witnessNames: 'Pnt. Pendamping & Saksi Keluarga',
+          witnessNames: record?.witnessNames || '',
         });
       }
       onClose();
@@ -94,6 +129,7 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
             {type === 'sidi' && <Award className="w-5 h-5 text-amber-400" />}
             {type === 'nikah' && <Heart className="w-5 h-5 text-emerald-400" />}
             <h3 className="text-base font-bold text-white">
+              {record ? 'Ubah ' : ''}
               {type === 'baptis' && 'Pencatatan Sakramen Baptisan Kudus'}
               {type === 'sidi' && 'Pencatatan Peneguhan Sidi (Pengakuan Iman)'}
               {type === 'nikah' && 'Pencatatan Pemberkatan Nikah Kudus'}

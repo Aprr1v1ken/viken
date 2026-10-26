@@ -17,6 +17,9 @@ export default defineConfig(() => {
           app.use(express.json({ limit: '10mb' }));
           app.use(express.urlencoded({ extended: true }));
           app.use('/api', apiRouter);
+          // Sajikan foto jemaat yang diunggah saat mode pengembangan juga.
+          app.use('/uploads', express.static(path.resolve(import.meta.dirname, 'uploads')));
+          app.use('/uploads', (_req: any, res: any) => { res.statusCode = 404; res.end('Berkas tidak ditemukan'); });
           server.middlewares.use(app);
         },
       },

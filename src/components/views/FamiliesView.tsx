@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Plus, Search, Eye, Trash2, Printer, Users } from 'lucide-react';
+import { Home, Plus, Search, Eye, Trash2, Printer, Users, Pencil } from 'lucide-react';
 import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { Family, Member, Rayon } from '../../types/index.ts';
 
@@ -8,6 +8,7 @@ interface FamiliesViewProps {
   members: Member[];
   rayons: Rayon[];
   onOpenAddModal: () => void;
+  onOpenEditModal: (family: Family) => void;
   onDeleteFamily: (id: string) => void;
   onOpenPrintReport: () => void;
 }
@@ -17,6 +18,7 @@ export const FamiliesView: React.FC<FamiliesViewProps> = ({
   members,
   rayons,
   onOpenAddModal,
+  onOpenEditModal,
   onDeleteFamily,
   onOpenPrintReport,
 }) => {
@@ -148,12 +150,21 @@ export const FamiliesView: React.FC<FamiliesViewProps> = ({
                     <span>Anggota KK</span>
                   </button>
                   <button
+                    onClick={() => onOpenEditModal(fam)}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+                    title="Ubah data Kartu Keluarga"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-cyan-300" />
+                    <span>Ubah</span>
+                  </button>
+                  <button
                     onClick={() => {
-                      if (confirm(`Hapus Kartu Keluarga Kel. ${fam.headOfFamilyName}?`)) {
+                      if (confirm(`Hapus Kartu Keluarga Kel. ${fam.headOfFamilyName}?\n\nAnggota keluarga tidak ikut terhapus, hanya kaitan KK-nya yang dilepas.`)) {
                         onDeleteFamily(fam.id);
                       }
                     }}
-                    className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
+                    className="p-1.5 text-red-300 hover:text-red-200 hover:bg-red-950/60 border border-red-500/20 rounded-lg transition-colors"
+                    title="Hapus Kartu Keluarga"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

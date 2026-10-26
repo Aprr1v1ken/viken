@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { BaptismRecord, ConfirmationRecord, MarriageRecord, Member } from '../../types/index.ts';
 
@@ -11,6 +11,12 @@ interface SacramentsViewProps {
   onOpenAddBaptism: () => void;
   onOpenAddConfirmation: () => void;
   onOpenAddMarriage: () => void;
+  onOpenEditBaptism: (record: BaptismRecord) => void;
+  onOpenEditConfirmation: (record: ConfirmationRecord) => void;
+  onOpenEditMarriage: (record: MarriageRecord) => void;
+  onDeleteBaptism: (id: string) => Promise<any>;
+  onDeleteConfirmation: (id: string) => Promise<any>;
+  onDeleteMarriage: (id: string) => Promise<any>;
   onPrintCertificate: (type: string, record: any) => void;
 }
 
@@ -22,9 +28,26 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
   onOpenAddBaptism,
   onOpenAddConfirmation,
   onOpenAddMarriage,
+  onOpenEditBaptism,
+  onOpenEditConfirmation,
+  onOpenEditMarriage,
+  onDeleteBaptism,
+  onDeleteConfirmation,
+  onDeleteMarriage,
   onPrintCertificate,
 }) => {
   const [activeTab, setActiveTab] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
+
+  const confirmDelete = async (label: string, fn: (id: string) => Promise<any>, id: string) => {
+    if (!window.confirm(`Hapus catatan ${label}?\n\nPerhatian: status sakramen pada data jemaat yang sudah terlanjur berubah tidak otomatis dikembalikan; perbarui data jemaat secara manual bila perlu.`)) return;
+    try {
+      const res = await fn(id);
+      if (res && res.success === false) alert(res.message || 'Gagal menghapus catatan sakramen');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
 
   return (
@@ -151,13 +174,27 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 text-slate-300">{b.parentNames || b.witnesses || '-'}</td>
                     <td className="py-3 px-4 font-medium text-slate-200">{b.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{b.certificateNo}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('baptis', b)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <span className="inline-flex gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('baptis', b)}
+                          className="px-2.5 py-1.5 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        <button
+                          onClick={() => onOpenEditBaptism(b)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Ubah
+                        </button>
+                        <button
+                          onClick={() => confirmDelete('baptisan', onDeleteBaptism, b.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -191,16 +228,30 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                       <div className="text-white font-medium">{formatDateDMY(c.confirmationDate)}</div>
                       <div className="text-[11px] text-slate-400">{c.churchPlace}</div>
                     </td>
-                    <td className="py-3 px-4 font-medium text-amber-400">{c.bibleVerse || 'Matius 28:20'}</td>
+                    <td className="py-3 px-4 font-medium text-amber-400">{c.bibleVerse || '-'}</td>
                     <td className="py-3 px-4 font-medium text-slate-200">{c.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{c.certificateNo}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('sidi', c)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <span className="inline-flex gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('sidi', c)}
+                          className="px-2.5 py-1.5 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        <button
+                          onClick={() => onOpenEditConfirmation(c)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Ubah
+                        </button>
+                        <button
+                          onClick={() => confirmDelete('peneguhan sidi', onDeleteConfirmation, c.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -240,13 +291,27 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 text-slate-300">{m.witnessNames || '-'}</td>
                     <td className="py-3 px-4 font-medium text-slate-200">{m.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{m.certificateNo}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('nikah', m)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <span className="inline-flex gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('nikah', m)}
+                          className="px-2.5 py-1.5 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        <button
+                          onClick={() => onOpenEditMarriage(m)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Ubah
+                        </button>
+                        <button
+                          onClick={() => confirmDelete('pernikahan', onDeleteMarriage, m.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
