@@ -98,6 +98,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="Contoh: admingereja"
                   className="w-full pl-9 pr-3 py-2 text-xs bg-[#070c1b] border border-slate-700 focus:border-amber-400 rounded-xl text-white outline-none transition-colors"
                 />
@@ -115,6 +119,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="••••••••"
                   className="w-full pl-9 pr-3 py-2 text-xs bg-[#070c1b] border border-slate-700 focus:border-amber-400 rounded-xl text-white outline-none transition-colors"
                 />

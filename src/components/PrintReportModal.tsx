@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { IMAGES } from '../assets/images.ts';
 import { X, Printer, Download, BookOpen } from 'lucide-react';
-import { formatRupiah, formatDateDMY } from '../utils/church-logic.ts';
+import { formatRupiah, formatDateDMY, formatHariIniPanjangID } from '../utils/church-logic.ts';
 import type { Member, Family, FinancialTransaction, Rayon, CategorialGroup } from '../types/index.ts';
 
 interface PrintReportModalProps {
@@ -27,10 +27,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const todayStr = new Intl.DateTimeFormat('id-ID', {
-    dateStyle: 'full',
-    timeZone: 'Asia/Makassar',
-  }).format(new Date());
+  const todayStr = formatHariIniPanjangID();
 
   const handlePrint = () => {
     window.print();

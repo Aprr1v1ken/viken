@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { Announcement, ChurchEvent } from '../types/index.ts';
 import type { PublicStats } from '../services/api.ts';
+import { formatTanggalWaktuID } from '../utils/church-logic.ts';
 
 interface PublicLandingProps {
   onEnterApp: () => void;
@@ -22,20 +23,6 @@ interface PublicLandingProps {
   announcements: Announcement[];
   events: ChurchEvent[];
   publicStats?: PublicStats | null;
-}
-
-function formatEventWhen(value: string): string {
-  const d = new Date(value.replace(' ', 'T'));
-  if (Number.isNaN(d.getTime())) return value;
-  return new Intl.DateTimeFormat('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Nusa Tenggara Timur',
-  }).format(d) + ' WITA';
 }
 
 export const PublicLanding: React.FC<PublicLandingProps> = ({
@@ -313,7 +300,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                   <h4 className="text-base font-bold text-white">{item.title}</h4>
                   <div className="flex items-center gap-1.5 text-xs text-amber-200">
                     <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>{formatEventWhen(item.startTime)}</span>
+                    <span>{formatTanggalWaktuID(item.startTime)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-slate-300">
                     <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />

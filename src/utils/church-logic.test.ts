@@ -10,6 +10,8 @@ import {
   validateMemberInput,
   calculateChurchStats,
   filterMembers,
+  formatTanggalPanjangID,
+  formatTanggalWaktuID,
 } from './church-logic.ts';
 import type { Member, Family, FinancialTransaction } from '../types/index.ts';
 
@@ -308,4 +310,25 @@ test('filterMembers filters by search keyword and criteria correctly', () => {
   const resRayon = filterMembers(members, '', 'r2');
   assert.equal(resRayon.length, 1);
   assert.equal(resRayon[0].fullName, 'Debora Kase');
+});
+
+test('formatTanggalPanjangID memformat tanggal Indonesia tanpa Intl', () => {
+  // 18 Oktober 2026 adalah hari Minggu
+  assert.equal(formatTanggalPanjangID('2026-10-18'), 'Minggu, 18 Oktober 2026');
+  assert.equal(formatTanggalPanjangID('2026-10-26'), 'Senin, 26 Oktober 2026');
+  assert.equal(formatTanggalPanjangID(''), '-');
+  assert.equal(formatTanggalPanjangID('bukan-tanggal'), 'bukan-tanggal');
+});
+
+test('formatTanggalWaktuID menampilkan jam dinding WITA apa adanya', () => {
+  assert.equal(
+    formatTanggalWaktuID('2026-10-18 06:30:00'),
+    'Minggu, 18 Oktober 2026 pukul 06.30 WITA'
+  );
+  assert.equal(
+    formatTanggalWaktuID('2026-10-21T17:00'),
+    'Rabu, 21 Oktober 2026 pukul 17.00 WITA'
+  );
+  assert.equal(formatTanggalWaktuID('2026-10-18'), 'Minggu, 18 Oktober 2026');
+  assert.equal(formatTanggalWaktuID(''), '-');
 });

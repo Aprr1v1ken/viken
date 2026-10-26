@@ -24,33 +24,56 @@ const API_BASE = '/api';
 const TOKEN_KEY = 'sysjeger_token';
 const USER_KEY = 'sysjeger_user';
 
+/*
+ * Sesi disimpan UTAMA di memori modul ini, dan dicerminkan ke localStorage
+ * sebisa mungkin (agar bertahan saat halaman dimuat ulang).
+ *
+ * Mengapa tidak localStorage saja? Di dalam iframe lintas-situs (mis. panel
+ * pratinjau yang menyematkan situs dari domain lain) sebagian peramban
+ * MEMBLOKIR localStorage. Akibatnya token hasil login hilang: server sudah
+ * menerima login (200) tetapi semua permintaan data sesudahnya terkirim
+ * tanpa token dan ditolak 401 — pengguna tampak "tidak bisa masuk".
+ * Dengan cadangan memori ini, login tetap berfungsi selama halaman dibuka
+ * walaupun penyimpanan peramban diblokir total.
+ */
+let memoryToken: string | null = null;
+let memoryUser: User | null = null;
+
 export function getAuthToken(): string | null {
+  if (memoryToken) return memoryToken;
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    memoryToken = localStorage.getItem(TOKEN_KEY);
   } catch {
-    return null;
+    /* penyimpanan diblokir — andalkan memori */
   }
+  return memoryToken;
 }
 
 export function setAuthSession(token: string, user: User) {
+  memoryToken = token;
+  memoryUser = user;
   try {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   } catch {
-    /* penyimpanan tidak tersedia — sesi hanya berlaku selama halaman dibuka */
+    /* penyimpanan diblokir — sesi tetap hidup dari memori */
   }
 }
 
 export function getStoredUser(): User | null {
+  if (memoryUser) return memoryUser;
   try {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as User) : null;
+    memoryUser = raw ? (JSON.parse(raw) as User) : null;
   } catch {
-    return null;
+    /* penyimpanan diblokir — andalkan memori */
   }
+  return memoryUser;
 }
 
 export function clearAuthSession() {
+  memoryToken = null;
+  memoryUser = null;
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -71,7 +94,13 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<any> {
     ...(init.headers as Record<string, string> | undefined),
   };
   if (init.body) headers['Content-Type'] = 'application/json';
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    // Sebagian proxy/pratinjau membuang header Authorization (dipakai untuk
+    // autentikasi proxy itu sendiri). Kirim juga token lewat header khusus
+    // agar sesi tetap terbawa; server menerima salah satu.
+    headers['X-SYSJEGER-Token'] = token;
+  }
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
 
@@ -102,7 +131,7 @@ export async function loginApi(
 ): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
   const res = await apiFetch('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username: username.trim(), password }),
   });
   if (res?.success && res.token && res.user) {
     setAuthSession(res.token, res.user);
@@ -286,7 +315,7 @@ export async function fetchBirthdaysApi() {
 export async function downloadBackupApi(): Promise<void> {
   const token = getAuthToken();
   const res = await fetch(`${API_BASE}/backup`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}`, 'X-SYSJEGER-Token': token } : {},
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
