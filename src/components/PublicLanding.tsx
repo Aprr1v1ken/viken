@@ -1,4 +1,5 @@
 import React from 'react';
+import { IMAGES } from '../assets/images.ts';
 import {
   Clock,
   MapPin,
@@ -13,25 +14,52 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { Announcement, ChurchEvent } from '../types/index.ts';
+import type { PublicStats } from '../services/api.ts';
 
 interface PublicLandingProps {
   onEnterApp: () => void;
+  isLoggedIn?: boolean;
   announcements: Announcement[];
   events: ChurchEvent[];
+  publicStats?: PublicStats | null;
+}
+
+function formatEventWhen(value: string): string {
+  const d = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Nusa Tenggara Timur',
+  }).format(d) + ' WITA';
 }
 
 export const PublicLanding: React.FC<PublicLandingProps> = ({
   onEnterApp,
+  isLoggedIn = false,
   announcements,
   events,
+  publicStats,
 }) => {
+  // Tampilkan kegiatan terdekat yang akan datang; bila belum ada jadwal baru
+  // yang diterbitkan, tampilkan jadwal terakhir sebagai rujukan pola ibadah.
+  const sortedEvents = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const upcomingEvents = sortedEvents.filter((e) => e.startTime >= nowIso).slice(0, 4);
+  const displayedEvents = upcomingEvents.length > 0 ? upcomingEvents : sortedEvents.slice(-4).reverse();
+  const enterLabel = isLoggedIn ? 'Buka Dashboard' : 'Masuk SYSJEGER';
+
   return (
     <div className="min-h-screen bg-[#060a16] text-slate-100 flex flex-col font-sans">
       {/* Top Banner Navigation */}
       <header className="sticky top-0 z-40 bg-[#060a16]/95 backdrop-blur-md border-b border-amber-500/20 px-4 md:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
-            src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+            src={IMAGES.crest}
             alt="Emblem GMIT"
             className="w-10 h-10 rounded-full border border-amber-400/50 object-cover shadow-md"
             referrerPolicy="no-referrer"
@@ -45,6 +73,13 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             </p>
           </div>
         </div>
+
+        <nav className="hidden lg:flex items-center gap-5 text-xs font-semibold text-slate-300">
+          <a href="#jadwal" className="hover:text-amber-300 transition-colors">Jadwal Ibadah</a>
+          <a href="#kegiatan" className="hover:text-amber-300 transition-colors">Kegiatan</a>
+          <a href="#warta" className="hover:text-amber-300 transition-colors">Warta Jemaat</a>
+          <a href="#kontak" className="hover:text-amber-300 transition-colors">Kontak</a>
+        </nav>
 
         <div className="flex items-center gap-3">
           <a
@@ -61,7 +96,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             onClick={onEnterApp}
             className="flex items-center gap-2 px-4 py-2 text-xs md:text-sm font-bold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
           >
-            <span>Masuk SYSJEGER</span>
+            <span>{enterLabel}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -71,7 +106,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
       <section className="relative overflow-hidden border-b border-amber-500/20">
         <div className="absolute inset-0 z-0">
           <img
-            src="/src/assets/images/church_sanctuary_exterior_1792129267960.jpg"
+            src={IMAGES.churchExterior}
             alt="Gedung Kebaktian GMIT Betel Fuimelang"
             className="w-full h-full object-cover opacity-35"
             referrerPolicy="no-referrer"
@@ -101,7 +136,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
               onClick={onEnterApp}
               className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-xl shadow-amber-500/25 flex items-center gap-2 transition-transform hover:-translate-y-0.5 cursor-pointer"
             >
-              <span>Akses Portal SYSJEGER & Kartu Jemaat</span>
+              <span>{isLoggedIn ? 'Buka Dashboard & Portal Jemaat' : 'Akses Portal SYSJEGER & Kartu Jemaat'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <a
@@ -111,6 +146,22 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
               Lihat Jadwal Ibadah Minggu
             </a>
           </div>
+
+          {publicStats && (
+            <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl mx-auto text-center">
+              {[
+                { value: publicStats.totalMembers, label: 'Warga Jemaat Aktif' },
+                { value: publicStats.totalFamilies, label: 'Kartu Keluarga' },
+                { value: publicStats.totalRayons, label: 'Rayon Pelayanan' },
+                { value: publicStats.totalStaff, label: 'Majelis & Pelayan' },
+              ].map((item) => (
+                <div key={item.label} className="px-4 py-4 rounded-2xl bg-[#0c1329]/85 border border-amber-500/20">
+                  <div className="text-2xl font-extrabold text-amber-300">{item.value}</div>
+                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -182,11 +233,11 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
         </section>
 
         {/* Pastor & Majelis Section */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center p-8 rounded-3xl bg-[#0c1329]/80 border border-amber-500/20">
+        <section id="sambutan" className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center p-8 rounded-3xl bg-[#0c1329]/80 border border-amber-500/20">
           <div className="md:col-span-1 flex flex-col items-center text-center">
             <div className="w-36 h-36 rounded-2xl overflow-hidden border-2 border-amber-400/50 shadow-xl mb-4">
               <img
-                src="/src/assets/images/pastor_portrait_1792129267812.jpg"
+                src={IMAGES.pastor}
                 alt="Pdt. Abraham M. Tefa, S.Th"
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
@@ -226,8 +277,59 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
           </div>
         </section>
 
+        {/* Kegiatan & Ibadah Terdekat */}
+        <section id="kegiatan" className="space-y-6">
+          <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
+            <div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
+                <Calendar className="w-6 h-6 text-amber-400" />
+                <span>Kegiatan & Ibadah Terdekat</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {upcomingEvents.length > 0
+                  ? 'Jadwal pelayanan yang akan datang — mari bersekutu bersama'
+                  : 'Jadwal pelayanan terakhir yang diterbitkan sekretariat'}
+              </p>
+            </div>
+          </div>
+
+          {displayedEvents.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-[#0c1329] border border-amber-500/20 text-xs text-slate-400 text-center">
+              Jadwal kegiatan belum diterbitkan. Silakan hubungi Sekretariat Majelis Jemaat.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {displayedEvents.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 space-y-2.5 hover:border-amber-400/40 transition-colors"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                      {item.category}
+                    </span>
+                    <span className="text-slate-400">{item.status}</span>
+                  </div>
+                  <h4 className="text-base font-bold text-white">{item.title}</h4>
+                  <div className="flex items-center gap-1.5 text-xs text-amber-200">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>{formatEventWhen(item.startTime)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>{item.location}</span>
+                  </div>
+                  {item.description && (
+                    <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">{item.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Warta Jemaat Terkini */}
-        <section className="space-y-6">
+        <section id="warta" className="space-y-6">
           <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
             <div>
               <h3 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
@@ -240,6 +342,11 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             </div>
           </div>
 
+          {announcements.length === 0 && (
+            <div className="p-6 rounded-2xl bg-[#0c1329] border border-amber-500/20 text-xs text-slate-400 text-center">
+              Warta jemaat pekan ini belum diterbitkan.
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {announcements.slice(0, 4).map((item) => (
               <div
@@ -268,9 +375,15 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-amber-500/20 bg-[#040710] py-8 px-4 text-center text-xs text-slate-400 space-y-2">
+      <footer id="kontak" className="border-t border-amber-500/20 bg-[#040710] py-8 px-4 text-center text-xs text-slate-400 space-y-2">
         <p className="font-medium text-slate-300">
-          SYSJEGER V2.0 — Sistem Informasi Jemaat dan Gereja GMIT BETEL FUIMELANG
+          © {new Date().getFullYear()} SYSJEGER V2.0 — Sistem Informasi Jemaat dan Gereja GMIT BETEL FUIMELANG
+        </p>
+        <p className="text-slate-500">
+          Sekretariat: Desa Fuimelang, Kec. Alor Tengah Utara, Kab. Alor, NTT ·{' '}
+          <a href="https://wa.me/6285173095482" target="_blank" rel="noreferrer" className="text-emerald-300 hover:text-emerald-200 font-semibold">
+            WhatsApp 0851-7309-5482
+          </a>
         </p>
         <p className="text-slate-500">
           Gereja Masehi Injili di Timor (GMIT) · Klasis Alor Tengah Utara · Kabupaten Alor, Nusa Tenggara Timur

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { IMAGES } from '../assets/images.ts';
 import { Lock, User, ArrowRight, Shield, AlertCircle, X, Check } from 'lucide-react';
 import { loginApi } from '../services/api.ts';
 import type { User as UserType } from '../types/index.ts';
@@ -14,8 +15,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onLoginSuccess,
 }) => {
-  const [username, setUsername] = useState('admingereja');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -61,7 +62,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
           <div className="w-16 h-16 mx-auto mb-3 rounded-full border-2 border-amber-400/60 overflow-hidden bg-slate-900 shadow-lg">
             <img
-              src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+              src={IMAGES.crest}
               alt="GMIT Betel Fuimelang"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -139,8 +140,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           {/* Quick Preset Selector */}
           <div className="pt-3 border-t border-slate-800 space-y-2">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">
-              Pilih Akun Cepat Pengujian:
+              Akun Demo — klik untuk mengisi formulir:
             </div>
+            <p className="text-[10px] text-amber-500/90 text-center leading-relaxed">
+              Kata sandi demo wajib diganti sebelum situs dipakai resmi (lihat README).
+            </p>
             <div className="grid grid-cols-2 gap-1.5 text-[11px]">
               <button
                 type="button"

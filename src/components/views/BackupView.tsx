@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   Key,
 } from 'lucide-react';
-import { emptyDatabaseApi, resetSeedDataApi } from '../../services/api.ts';
+import { downloadBackupApi, emptyDatabaseApi, resetSeedDataApi } from '../../services/api.ts';
 import type { User } from '../../types/index.ts';
 
 interface BackupViewProps {
@@ -43,18 +43,12 @@ export const BackupView: React.FC<BackupViewProps> = ({
   const handleDownloadBackup = async () => {
     setDownloading(true);
     try {
-      const res = await fetch('/api/backup');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `sysjeger_backup_gmit_betel_${new Date().toISOString().substring(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      await downloadBackupApi();
       setBackedUp(true);
       setTimeout(() => setBackedUp(false), 6000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setAlertMessage({ type: 'error', text: err?.message || 'Gagal mengunduh berkas cadangan database.' });
     } finally {
       setDownloading(false);
     }

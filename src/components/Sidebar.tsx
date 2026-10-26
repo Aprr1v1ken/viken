@@ -1,4 +1,5 @@
 import React from 'react';
+import { IMAGES } from '../assets/images.ts';
 import {
   LayoutDashboard,
   Users,
@@ -43,6 +44,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
+  // Menu disesuaikan dengan hak akses peran yang sedang masuk.
+  const role = currentUser?.role;
+  const canSeeBackup = role === 'Super Admin' || role === 'Admin Gereja';
+  const canSeeAudit = canSeeBackup || role === 'Ketua Majelis/Pendeta';
+  const isJemaat = role === 'Jemaat';
+
   const menuSections = [
     {
       title: 'UTAMA',
@@ -83,6 +90,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const visibleSections = (isJemaat
+    ? [
+        {
+          title: 'PORTAL & SISTEM',
+          items: [{ id: 'portal', label: 'Portal Khusus Jemaat', icon: UserCheck }],
+        },
+      ]
+    : menuSections.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => {
+          if (item.id === 'backup') return canSeeBackup;
+          if (item.id === 'audit') return canSeeAudit;
+          return true;
+        }),
+      }))).filter((section) => section.items.length > 0);
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -102,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center gap-3 px-5 py-5 border-b border-amber-500/20 bg-[#060a16]">
           <div className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden border border-amber-400/40 bg-slate-900 shadow-md">
             <img
-              src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+              src={IMAGES.crest}
               alt="GMIT Betel Fuimelang"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -123,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation links */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-800">
-          {menuSections.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.title} className="space-y-1">
               <div className="px-3 text-[10px] font-bold tracking-wider text-amber-500/80 uppercase">
                 {section.title}

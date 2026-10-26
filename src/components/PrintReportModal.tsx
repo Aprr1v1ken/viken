@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { IMAGES } from '../assets/images.ts';
 import { X, Printer, Download, BookOpen } from 'lucide-react';
 import { formatRupiah, formatDateDMY } from '../utils/church-logic.ts';
 import type { Member, Family, FinancialTransaction, Rayon, CategorialGroup } from '../types/index.ts';
@@ -77,7 +78,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           <div className="flex items-center justify-between border-b-2 border-black pb-4 mb-6">
             <div className="w-20 h-20 shrink-0">
               <img
-                src="/src/assets/images/gmit_church_crest_1792129266798.jpg"
+                src={IMAGES.crest}
                 alt="Logo GMIT"
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"

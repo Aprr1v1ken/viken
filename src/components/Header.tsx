@@ -1,13 +1,15 @@
 import React from 'react';
-import { Menu, Bell, Shield, User, Globe, ChevronDown } from 'lucide-react';
-import type { User as UserType, UserRole } from '../types/index.ts';
+import { Menu, Shield, Globe, LogOut, KeyRound, Lock } from 'lucide-react';
+import type { User as UserType } from '../types/index.ts';
 
 interface HeaderProps {
   currentView: string;
   currentUser: UserType | null;
   onOpenMobileSidebar: () => void;
   onOpenPublicSite: () => void;
-  onSwitchRole: (role: UserRole) => void;
+  onLogout: () => void;
+  onOpenLogin: () => void;
+  onOpenChangePassword: () => void;
 }
 
 const VIEW_TITLES: Record<string, string> = {
@@ -35,22 +37,14 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onOpenMobileSidebar,
   onOpenPublicSite,
-  onSwitchRole,
+  onLogout,
+  onOpenLogin,
+  onOpenChangePassword,
 }) => {
-  const [showRoleMenu, setShowRoleMenu] = React.useState(false);
-
-  const availableRoles: UserRole[] = [
-    'Super Admin',
-    'Admin Gereja',
-    'Ketua Majelis/Pendeta',
-    'Majelis/Rayon',
-    'Jemaat',
-  ];
-
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-8 bg-[#070b18]/95 backdrop-blur-md border-b border-amber-500/20 text-slate-200">
       {/* Left zone: Mobile toggle & Breadcrumb */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenMobileSidebar}
           className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded-md lg:hidden"
@@ -59,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium min-w-0">
           <span className="text-amber-400 font-bold tracking-wide">SYSJEGER</span>
           <span className="text-slate-600">/</span>
           <span className="text-slate-200 font-semibold truncate max-w-[200px] sm:max-w-none">
@@ -68,49 +62,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right zone: Switch Role Fast selector + Profile */}
-      <div className="flex items-center gap-3">
-        {/* Role Switcher for seamless verification & multi-role workflows */}
-        <div className="relative">
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#0e162d] border border-amber-500/30 text-amber-300 hover:bg-[#152042] transition-colors"
-            title="Ganti Peran Hak Akses untuk Pengujian Sistem"
-          >
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Peran:</span>
-            <span className="font-bold text-white">{currentUser?.role || 'Guest'}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-amber-400/80" />
-          </button>
-
-          {showRoleMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setShowRoleMenu(false)}
-              />
-              <div className="absolute right-0 mt-2 w-56 rounded-lg bg-[#0b1226] border border-amber-500/30 shadow-xl py-1 z-50 text-xs">
-                <div className="px-3 py-2 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase">
-                  Beralih Hak Akses (RBAC)
-                </div>
-                {availableRoles.map((role) => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      onSwitchRole(role);
-                      setShowRoleMenu(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 transition-colors ${
-                      currentUser?.role === role ? 'text-amber-400 font-bold bg-amber-500/10' : 'text-slate-300'
-                    }`}
-                  >
-                    <span>{role}</span>
-                    {currentUser?.role === role && <span className="text-[10px] text-amber-400">Aktif</span>}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+      {/* Right zone: akun aktif, web publik, ganti akun, keluar */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#0e162d] border border-amber-500/30 text-amber-300"
+          title={currentUser ? `Masuk sebagai ${currentUser.name} (${currentUser.username})` : undefined}
+        >
+          <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="font-bold text-white whitespace-nowrap">{currentUser?.role || 'Tamu'}</span>
         </div>
 
         <button
@@ -121,10 +80,38 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Halaman Warta Publik</span>
         </button>
 
+        <button
+          onClick={onOpenLogin}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800/80 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+          title="Masuk dengan akun lain"
+        >
+          <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+          <span>Ganti Akun</span>
+        </button>
+
         <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white text-xs font-bold border border-amber-300/40 shadow-xs">
+          <div
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white text-xs font-bold border border-amber-300/40 shadow-xs"
+            title={currentUser?.name || 'Pengguna'}
+          >
             {currentUser?.name?.substring(0, 2).toUpperCase() || 'AD'}
           </div>
+          <button
+            onClick={onOpenChangePassword}
+            className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-md border border-slate-800 transition-colors"
+            title="Ganti Kata Sandi"
+            aria-label="Ganti Kata Sandi"
+          >
+            <Lock className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onLogout}
+            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md border border-slate-800 transition-colors"
+            title="Keluar / Logout"
+            aria-label="Keluar"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </header>

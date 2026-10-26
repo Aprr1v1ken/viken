@@ -1,0 +1,17 @@
+# Dependensi & hasil build
+node_modules/
+dist/
+
+# Konfigurasi lokal & rahasia
+.env
+.env.local
+
+# Database salinan/pratinjau (database utama sysjeger.sqlite tetap terlacak)
+*.preview.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Log & berkas sementara
+*.log
+.DS_Store
