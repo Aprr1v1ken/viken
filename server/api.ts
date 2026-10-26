@@ -76,7 +76,7 @@ apiRouter.post('/auth/login', (req, res) => {
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE username = ? AND status = \'Aktif\'').get(String(username).trim()) as any;
+  const user = db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND status = \'Aktif\'').get(String(username).trim()) as any;
 
   const check = user ? verifyPassword(String(password), user.password_hash) : { ok: false, needsRehash: false };
   if (!user || !check.ok) {

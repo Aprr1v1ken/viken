@@ -157,9 +157,18 @@ export function authGate(req: Request, res: Response, next: NextFunction) {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+  const bearer = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+  // Cadangan bila proxy/pratinjau membuang header Authorization.
+  const custom = String(req.headers['x-sysjeger-token'] || '').trim();
+  const token = bearer || custom;
   const user = token ? verifyToken(token) : null;
   if (!user) {
+    // Catat ALASAN penolakan (keberadaan header saja, BUKAN isi token) agar
+    // kegagalan login mudah didiagnosis dari log server.
+    console.warn(
+      `[SYSJEGER] 401 ${req.method} ${req.originalUrl} - token ${token ? 'tidak valid/kedaluwarsa' : 'tidak terkirim'} ` +
+      `(Authorization: ${header ? 'ada' : 'kosong'}, X-SYSJEGER-Token: ${custom ? 'ada' : 'kosong'})`
+    );
     return res.status(401).json({
       success: false,
       message: 'Sesi tidak ditemukan atau telah berakhir. Silakan masuk kembali.',
