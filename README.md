@@ -99,6 +99,8 @@ pada jendela login ("Akun Demo").
 | `PORT`             | `3000`             | Port server produksi                        |
 | `SESSION_SECRET`   | *(kunci dev + peringatan)* | Kunci token sesi — wajib diubah di produksi |
 | `SYSJEGER_DB_PATH` | `./sysjeger.sqlite` | Lokasi berkas database SQLite              |
+| `FRAME_ANCESTORS`  | *(tidak dibatasi)* | Domain yang boleh menyematkan situs sebagai iframe (kosongkan agar pratinjau semacam Arena Live Preview berfungsi; contoh ketat: `'self'`) |
+| `ACCESS_LOG`       | nyala               | Atur `off` untuk mematikan log akses server |
 
 ## Struktur proyek
 
