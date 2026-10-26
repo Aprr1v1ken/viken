@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { apiRouter } from './server/api.ts';
+import { UPLOADS_DIR } from './server/uploads.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -42,6 +43,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', apiRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ success: false, message: 'Rute API tidak ditemukan' });
+});
+
+// Berkas unggahan pengguna (foto jemaat) — nama berkas acak sulit ditebak.
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
+// Berkas unggahan yang tidak ada harus 404 (bukan jatuh ke halaman SPA)
+app.use('/uploads', (_req, res) => {
+  res.status(404).type('text/plain').send('Berkas tidak ditemukan');
 });
 
 // Serve static frontend assets

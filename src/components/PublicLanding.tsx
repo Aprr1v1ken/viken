@@ -115,7 +115,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
           </h2>
 
           <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed mb-8">
-            Membangun persekutuan jemaat yang berakar dalam Firman Allah, bertumbuh dalam kasih persaudaraan, dan berbuah dalam pelayanan kasih di tengah masyarakat Alor Barat Daya.
+            Membangun persekutuan jemaat yang berakar dalam Firman Allah, bertumbuh dalam kasih persaudaraan, dan berbuah dalam pelayanan kasih di tengah masyarakat Alor Tengah Utara.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-4">
@@ -134,7 +134,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             </a>
           </div>
 
-          {publicStats && (
+          {publicStats && publicStats.totalMembers > 0 && (
             <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl mx-auto text-center">
               {[
                 { value: publicStats.totalMembers, label: 'Warga Jemaat Aktif' },
@@ -225,19 +225,16 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             <div className="w-36 h-36 rounded-2xl overflow-hidden border-2 border-amber-400/50 shadow-xl mb-4">
               <img
                 src={IMAGES.pastor}
-                alt="Pdt. Abraham M. Tefa, S.Th"
+                alt="Ketua Majelis Jemaat GMIT Betel Fuimelang"
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
             </div>
             <h4 className="font-bold text-white text-base">
-              Pdt. Abraham M. Tefa, S.Th
+              Ketua Majelis Jemaat
             </h4>
             <p className="text-xs text-amber-400 font-medium">
-              Ketua Majelis Jemaat GMIT Betel Fuimelang
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Periode Pelayanan 2024 - 2027
+              Pendeta Jemaat GMIT Betel Fuimelang
             </p>
           </div>
 
@@ -254,7 +251,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             <div className="pt-2 flex flex-wrap gap-4 text-xs text-slate-400">
               <div className="flex items-center gap-1.5">
                 <MapPin className="w-4 h-4 text-amber-400" />
-                <span>Desa Fuimelang, Alor Barat Daya, NTT</span>
+                <span>Desa Fuimelang, Kec. Alor Tengah Utara, Kab. Alor, NTT</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Phone className="w-4 h-4 text-amber-400" />

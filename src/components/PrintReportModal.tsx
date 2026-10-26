@@ -93,7 +93,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                 KLASIS ALOR BARAT DAYA — MAJELIS JEMAAT BETEL FUIMELANG
               </div>
               <div className="text-[11px] font-sans text-slate-600 mt-0.5">
-                Alamat: Jl. Raya Fuimelang - Moru, Desa Fuimelang, Kec. Alor Barat Daya, Kab. Alor, Nusa Tenggara Timur
+                Alamat: Jl. Raya Fuimelang - Moru, Desa Fuimelang, Kec. Alor Tengah Utara, Kab. Alor, Nusa Tenggara Timur
               </div>
             </div>
 
@@ -111,7 +111,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               {selectedType === 'sacraments' && 'LAPORAN REGISTER SAKRAMEN GEREJAWI'}
             </h2>
             <div className="text-xs font-sans text-slate-600 mt-1">
-              GMIT Jemaat Betel Fuimelang · Klasis Alor Barat Daya
+              GMIT Jemaat Betel Fuimelang · Klasis Alor Tengah Utara
             </div>
           </div>
 
@@ -224,7 +224,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
             <div className="space-y-4">
               <h3 className="font-bold text-xs font-sans uppercase">A. Rekapitulasi Status Sakramen</h3>
               <p className="text-xs font-sans text-slate-700 leading-relaxed">
-                Seluruh pencatatan sakramen Baptisan Kudus, Peneguhan Sidi, dan Pernikahan Gerejawi telah disahkan dalam register resmi Jemaat Betel Fuimelang Klasis Alor Barat Daya.
+                Seluruh pencatatan sakramen Baptisan Kudus, Peneguhan Sidi, dan Pernikahan Gerejawi telah disahkan dalam register resmi Jemaat Betel Fuimelang Klasis Alor Tengah Utara.
               </p>
             </div>
           )}
@@ -245,10 +245,10 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   Ketua Majelis Jemaat / Pendeta
                 </div>
                 <div className="font-bold underline text-sm">
-                  Pdt. Abraham M. Tefa, S.Th
+                  ( .................................... )
                 </div>
                 <div className="text-[11px] text-slate-600">
-                  Pendeta GMIT / NIP Presbiter
+                  Nama jelas & tanda tangan
                 </div>
               </div>
 
@@ -257,10 +257,10 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   Sekretaris Majelis Jemaat
                 </div>
                 <div className="font-bold underline text-sm">
-                  Dkn. Elisabeth Lopo
+                  ( .................................... )
                 </div>
                 <div className="text-[11px] text-slate-600">
-                  Diaken Tata Usaha Jemaat
+                  Nama jelas & tanda tangan
                 </div>
               </div>
             </div>

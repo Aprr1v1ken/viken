@@ -1,28 +1,65 @@
 import React, { useState } from 'react';
-import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, CheckCircle2 } from 'lucide-react';
+import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, Pencil, Trash2 } from 'lucide-react';
 import { formatRupiah, formatDateDMY } from '../../utils/church-logic.ts';
 import type { FinancialTransaction } from '../../types/index.ts';
 
 interface FinanceViewProps {
   transactions: FinancialTransaction[];
-  onAddTransaction: (data: Partial<FinancialTransaction>) => Promise<void>;
+  onSaveTransaction: (data: Partial<FinancialTransaction>, id?: string) => Promise<any>;
+  onDeleteTransaction: (id: string) => Promise<any>;
   onOpenPrintReport: () => void;
 }
 
 export const FinanceView: React.FC<FinanceViewProps> = ({
   transactions,
-  onAddTransaction,
+  onSaveTransaction,
+  onDeleteTransaction,
   onOpenPrintReport,
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<FinancialTransaction | null>(null);
+  const [recordedBy, setRecordedBy] = useState('');
+
+  const openAdd = () => {
+    setEditing(null);
+    setTxDate(new Date().toISOString().substring(0, 10));
+    setType('Pemasukan');
+    setCategory('Kolekte Ibadah Minggu');
+    setAmount(0);
+    setDescription('');
+    setRecordedBy('');
+    setShowModal(true);
+  };
+
+  const openEdit = (tx: FinancialTransaction) => {
+    setEditing(tx);
+    setTxDate(tx.txDate || '');
+    setType(tx.type);
+    setCategory(tx.category);
+    setAmount(tx.amount || 0);
+    setDescription(tx.description || '');
+    setRecordedBy(tx.recordedBy || '');
+    setShowModal(true);
+  };
+
+  const handleDelete = async (tx: FinancialTransaction) => {
+    if (!window.confirm(`Hapus transaksi ${tx.txNo} (${tx.type} ${tx.category} sejumlah ${formatRupiah(tx.amount)})?\nSaldo kas akan berubah mengikuti penghapusan ini.`)) return;
+    try {
+      const res = await onDeleteTransaction(tx.id);
+      if (res && res.success === false) alert(res.message || 'Gagal menghapus transaksi');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Form states
-  const [txDate, setTxDate] = useState('18-10-2026');
+  const [txDate, setTxDate] = useState(new Date().toISOString().substring(0, 10));
   const [type, setType] = useState<'Pemasukan' | 'Pengeluaran'>('Pemasukan');
   const [category, setCategory] = useState<any>('Kolekte Ibadah Minggu');
-  const [amount, setAmount] = useState<number>(1000000);
+  const [amount, setAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -50,18 +87,25 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     if (!amount || amount <= 0) return;
     setSaving(true);
     try {
-      await onAddTransaction({
-        txDate,
-        type,
-        category,
-        amount: Number(amount),
-        description: description || `${type} ${category}`,
-        recordedBy: 'Bendahara Jemaat / Dkn. Samuel Blegur',
-      });
+      const res = await onSaveTransaction(
+        {
+          txDate,
+          type,
+          category,
+          amount: Number(amount),
+          description: description || `${type} ${category}`,
+          recordedBy,
+        },
+        editing?.id
+      );
+      if (res && res.success === false) {
+        alert(res.message || 'Gagal menyimpan transaksi');
+        return;
+      }
       setShowModal(false);
-      setDescription('');
     } catch (err) {
       console.error(err);
+      alert('Gagal menyimpan. Periksa koneksi lalu coba lagi.');
     } finally {
       setSaving(false);
     }
@@ -104,7 +148,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={openAdd}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -201,13 +245,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <th className="py-3 px-4">Uraian / Deskripsi</th>
                 <th className="py-3 px-4 text-right">Jumlah (Rp)</th>
                 <th className="py-3 px-4">Pencatat</th>
+                <th className="py-3 px-4 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filtered.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-800/40">
                   <td className="py-3 px-4 font-mono font-medium text-amber-300">{t.txNo}</td>
-                  <td className="py-3 px-4 whitespace-nowrap">{t.txDate}</td>
+                  <td className="py-3 px-4 whitespace-nowrap">{formatDateDMY(t.txDate)}</td>
                   <td className="py-3 px-4 font-semibold text-white">{t.category}</td>
                   <td className="py-3 px-4 text-slate-300 max-w-sm">{t.description}</td>
                   <td className="py-3 px-4 text-right font-mono font-bold whitespace-nowrap tabular-nums">
@@ -218,8 +263,29 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-400 text-[11px]">{t.recordedBy}</td>
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => openEdit(t)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold mr-1.5 cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Ubah
+                    </button>
+                    <button
+                      onClick={() => handleDelete(t)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Hapus
+                    </button>
+                  </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                    Belum ada transaksi kas tercatat.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -230,14 +296,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
             <h3 className="text-base font-bold text-amber-300">
-              Input Transaksi Kas Gereja
+              {editing ? 'Ubah Transaksi Kas Gereja' : 'Input Transaksi Kas Gereja'}
             </h3>
 
             <form onSubmit={handleSave} className="space-y-3">
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Tanggal Transaksi (DD-MM-YYYY) *</label>
+                <label className="block font-semibold text-slate-300 mb-1">Tanggal Transaksi *</label>
                 <input
-                  type="text"
+                  type="date"
                   required
                   value={txDate}
                   onChange={(e) => setTxDate(e.target.value)}
@@ -335,6 +401,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Dicatat Oleh (Bendahara/Petugas)</label>
+                <input
+                  type="text"
+                  value={recordedBy}
+                  onChange={(e) => setRecordedBy(e.target.value)}
+                  placeholder="Nama bendahara atau petugas pencatat"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -348,7 +425,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   disabled={saving}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
                 >
-                  {saving ? 'Menyimpan...' : 'Simpan Transaksi'}
+                  {saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Simpan Transaksi'}
                 </button>
               </div>
             </form>

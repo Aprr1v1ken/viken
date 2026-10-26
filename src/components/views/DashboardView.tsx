@@ -24,7 +24,6 @@ interface DashboardViewProps {
   onOpenAddFamily: () => void;
   onOpenAddFinance: () => void;
   onOpenAddAttendance: () => void;
-  onSeedDemoData?: () => void;
   currentUser?: User | null;
 }
 
@@ -35,7 +34,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddFamily,
   onOpenAddFinance,
   onOpenAddAttendance,
-  onSeedDemoData,
   currentUser,
 }) => {
   if (!stats) {
@@ -214,9 +212,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <BirthdayTracker
         birthdayMembers={birthdayMembers}
         onOpenAddMember={onOpenAddMember}
-        onSeedDemoData={onSeedDemoData}
         totalSoul={totalSoul}
-        isSuperAdmin={currentUser?.role === 'Super Admin'}
       />
 
       {/* Main Charts & Demographics Grid */}

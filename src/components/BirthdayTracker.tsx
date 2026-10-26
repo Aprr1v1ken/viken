@@ -34,17 +34,13 @@ import {
 interface BirthdayTrackerProps {
   birthdayMembers: BirthdayMemberItem[];
   onOpenAddMember: () => void;
-  onSeedDemoData?: () => void;
   totalSoul?: number;
-  isSuperAdmin?: boolean;
 }
 
 export const BirthdayTracker: React.FC<BirthdayTrackerProps> = ({
   birthdayMembers = [],
   onOpenAddMember,
-  onSeedDemoData,
   totalSoul = 0,
-  isSuperAdmin = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRayon, setFilterRayon] = useState<string>('all');
@@ -463,7 +459,7 @@ export const BirthdayTracker: React.FC<BirthdayTrackerProps> = ({
             </h4>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
               {totalSoul === 0
-                ? 'Database jemaat saat ini kosong. Anda dapat menambahkan anggota jemaat baru atau memuat data contoh untuk menguji Birthday Tracker.'
+                ? 'Database jemaat saat ini masih kosong. Tambahkan anggota jemaat baru agar pengingat ulang tahun dapat bekerja.'
                 : 'Data tanggal lahir anggota jemaat akan otomatis disinkronkan dan diurutkan berdasarkan tanggal kalender.'}
             </p>
           </div>
@@ -476,16 +472,6 @@ export const BirthdayTracker: React.FC<BirthdayTrackerProps> = ({
               <UserPlus className="w-3.5 h-3.5" />
               <span>+ Tambah Anggota Jemaat</span>
             </button>
-            {onSeedDemoData && totalSoul === 0 && isSuperAdmin && (
-              <button
-                onClick={onSeedDemoData}
-                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
-                title="Hanya Super Admin yang memiliki wewenang untuk memuat data awal percontohan"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                <span>Muat Contoh Data Jemaat (Super Admin)</span>
-              </button>
-            )}
           </div>
         </div>
       )}

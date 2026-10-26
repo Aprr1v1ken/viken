@@ -14,9 +14,12 @@ import {
   XCircle,
   Award,
   IdCard,
+  User,
+  MessageSquare,
+  RotateCcw,
 } from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../../utils/church-logic.ts';
-import type { Member, Rayon, CategorialGroup } from '../../types/index.ts';
+import type { Member, Rayon, CategorialGroup, DataCorrectionRequest } from '../../types/index.ts';
 
 interface MembersViewProps {
   members: Member[];
@@ -26,6 +29,9 @@ interface MembersViewProps {
   onOpenEditModal: (member: Member) => void;
   onOpenDetailModal: (member: Member) => void;
   onDeleteMember: (id: string) => void;
+  corrections?: DataCorrectionRequest[];
+  onUpdateCorrection?: (id: string, status: string, adminNotes: string) => Promise<any>;
+  onDeleteCorrection?: (id: string) => Promise<any>;
   onOpenImportModal: () => void;
   onOpenPrintReport: () => void;
 }
@@ -38,10 +44,42 @@ export const MembersView: React.FC<MembersViewProps> = ({
   onOpenEditModal,
   onOpenDetailModal,
   onDeleteMember,
+  corrections = [],
+  onUpdateCorrection,
+  onDeleteCorrection,
   onOpenImportModal,
   onOpenPrintReport,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [correctionNotes, setCorrectionNotes] = useState<Record<string, string>>({});
+
+  const sortedCorrections = [...corrections].sort((a, b) =>
+    a.status === 'Menunggu' && b.status !== 'Menunggu' ? -1 : b.status === 'Menunggu' && a.status !== 'Menunggu' ? 1 : 0
+  );
+  const pendingCorrections = corrections.filter((c) => c.status === 'Menunggu').length;
+
+  const handleCorrectionStatus = async (c: DataCorrectionRequest, status: string) => {
+    if (!onUpdateCorrection) return;
+    try {
+      const res = await onUpdateCorrection(c.id, status, correctionNotes[c.id] ?? c.adminNotes ?? '');
+      if (res && res.success === false) alert(res.message || 'Gagal memperbarui permintaan koreksi');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memperbarui. Periksa koneksi lalu coba lagi.');
+    }
+  };
+
+  const handleDeleteCorrection = async (c: DataCorrectionRequest) => {
+    if (!onDeleteCorrection) return;
+    if (!window.confirm(`Hapus permintaan koreksi data dari "${c.memberName}"?`)) return;
+    try {
+      const res = await onDeleteCorrection(c.id);
+      if (res && res.success === false) alert(res.message || 'Gagal menghapus permintaan koreksi');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
   const [selectedRayon, setSelectedRayon] = useState('all');
   const [selectedCat, setSelectedCat] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -254,14 +292,32 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         {member.memberNo}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-white">
-                          {member.fullName}
-                        </div>
-                        {member.nickname && (
-                          <div className="text-[11px] text-slate-400">
-                            Panggilan: {member.nickname}
+                        <div className="flex items-center gap-3">
+                          {member.photoUrl ? (
+                            <img
+                              src={member.photoUrl}
+                              alt={`Foto ${member.fullName}`}
+                              className="w-10 h-12 object-cover rounded-md border border-amber-500/30 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-12 rounded-md border border-slate-700 bg-slate-900 flex items-center justify-center shrink-0" title="Belum ada foto — tambahkan lewat tombol Ubah">
+                              <User className="w-5 h-5 text-slate-500" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-semibold text-white">
+                              {member.fullName}
+                            </div>
+                            {member.nickname && (
+                              <div className="text-[11px] text-slate-400">
+                                Panggilan: {member.nickname}
+                              </div>
+                            )}
+                            {!member.photoUrl && (
+                              <div className="text-[10px] text-amber-400/80">Belum ada foto</div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
                       <td className="py-3 px-3 font-semibold text-slate-300">
                         {member.gender === 'Laki-laki' ? 'L' : 'P'}
@@ -377,6 +433,109 @@ export const MembersView: React.FC<MembersViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Panel Permintaan Koreksi Data dari Portal Jemaat */}
+      {onUpdateCorrection && (
+        <div className="rounded-2xl bg-[#0c1329] border border-amber-500/20 overflow-hidden shadow-lg">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-[#070b18]">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-amber-400" />
+              Permintaan Koreksi Data Jemaat
+            </h3>
+            {pendingCorrections > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold">
+                {pendingCorrections} menunggu ditindaklanjuti
+              </span>
+            )}
+          </div>
+
+          {sortedCorrections.length === 0 ? (
+            <p className="px-5 py-6 text-center text-xs text-slate-500">
+              Belum ada permintaan koreksi data dari jemaat melalui Portal Jemaat.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {sortedCorrections.map((c) => (
+                <div key={c.id} className="px-5 py-4 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <span className="font-bold text-white">{c.memberName}</span>
+                      <span className="text-slate-500 ml-2">{formatDateDMY(c.requestDate)}</span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${
+                        c.status === 'Disetujui'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : c.status === 'Ditolak'
+                          ? 'bg-red-500/15 text-red-300 border-red-500/40'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      {c.status}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 border border-slate-800 rounded-xl px-3 py-2.5">
+                    {c.details}
+                  </p>
+
+                  {c.adminNotes && c.status !== 'Menunggu' && (
+                    <p className="text-[11px] text-slate-400">
+                      Catatan admin: <span className="text-slate-200 italic">{c.adminNotes}</span>
+                    </p>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={correctionNotes[c.id] ?? c.adminNotes ?? ''}
+                      onChange={(e) => setCorrectionNotes((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                      placeholder="Catatan admin untuk jemaat (mis. data sudah diperbarui)"
+                      className="flex-1 px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white text-xs outline-none focus:border-amber-400"
+                    />
+                    <div className="flex gap-1.5 shrink-0">
+                      {c.status !== 'Disetujui' && (
+                        <button
+                          onClick={() => handleCorrectionStatus(c, 'Disetujui')}
+                          className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-bold cursor-pointer"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Setujui
+                        </button>
+                      )}
+                      {c.status !== 'Ditolak' && (
+                        <button
+                          onClick={() => handleCorrectionStatus(c, 'Ditolak')}
+                          className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-red-300 text-[11px] font-bold cursor-pointer"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Tolak
+                        </button>
+                      )}
+                      {c.status !== 'Menunggu' && (
+                        <button
+                          onClick={() => handleCorrectionStatus(c, 'Menunggu')}
+                          className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold cursor-pointer"
+                          title="Kembalikan status ke Menunggu"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" /> Menunggu
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteCorrection(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-bold hover:bg-red-900/50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Hapus
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-slate-800">
+            Setelah menyetujui, perbarui data jemaat yang bersangkutan lewat tombol Ubah pada daftar di atas.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

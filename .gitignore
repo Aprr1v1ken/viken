@@ -12,6 +12,10 @@ dist/
 *.sqlite-wal
 *.sqlite-shm
 
+# Berkas unggahan pengguna (foto jemaat, dll.) — data operasional, bukan kode
+uploads/
+
 # Log & berkas sementara
 *.log
 .DS_Store
+uploads-preview/

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, AlertCircle, Camera, ImagePlus, Trash2, Loader2 } from 'lucide-react';
 import { CalendarDatePicker } from './CalendarDatePicker.tsx';
+import { uploadMemberPhotoApi } from '../services/api.ts';
 import {
   STANDARD_EDUCATION_OPTIONS,
   STANDARD_OCCUPATION_OPTIONS,
@@ -32,6 +33,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [activeTab, setActiveTab] = useState<'diri' | 'alamat' | 'gereja' | 'sakramen' | 'keluarga' | 'catatan'>('diri');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [formData, setFormData] = useState<Partial<Member>>({
     fullName: '',
@@ -42,8 +45,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     familyRole: 'Anggota' as any,
     gender: 'Laki-laki',
     birthPlace: 'Fuimelang',
-    birthDate: '1995-01-01',
-    address: 'Jl. Timor Raya No. 12',
+    birthDate: '',
+    address: '',
     kelurahan: 'Fuimelang',
     kecamatan: 'Alor Tengah Utara',
     kabupaten: 'Alor',
@@ -64,6 +67,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     occupation: 'Wiraswasta / Pedagang',
     status: 'Aktif',
     notes: '',
+    photoUrl: '',
   });
 
   useEffect(() => {
@@ -79,8 +83,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         familyRole: 'Anak',
         gender: 'Laki-laki',
         birthPlace: 'Fuimelang',
-        birthDate: '1995-01-01',
-        address: 'Desa Fuimelang RT 01',
+        birthDate: '',
+        address: '',
         kelurahan: 'Fuimelang',
         kecamatan: 'Alor Tengah Utara',
         kabupaten: 'Alor',
@@ -101,6 +105,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         occupation: 'Wiraswasta / Pedagang',
         status: 'Aktif',
         notes: '',
+        photoUrl: '',
       });
     }
     setError('');
@@ -113,8 +118,66 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Unggah foto jemaat: gambar dipotong 3x4 & dikompresi di browser,
+  // lalu disimpan ke server (folder uploads) dan URL-nya tercatat pada data jemaat.
+  const handlePhotoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Berkas yang dipilih bukan gambar. Pilih foto JPG/PNG/WebP.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Ukuran foto terlalu besar (maksimal 10 MB).');
+      return;
+    }
+    setUploadingPhoto(true);
+    setError('');
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = async () => {
+      try {
+        const targetW = 600;
+        const targetH = 800; // rasio pas foto 3x4
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Peramban tidak mendukung pemrosesan gambar');
+        const scale = Math.max(targetW / img.width, targetH / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        ctx.drawImage(img, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const res: any = await uploadMemberPhotoApi(dataUrl);
+        const uploadedUrl = res?.url || res?.photo?.url || '';
+        if (res?.success && uploadedUrl) {
+          setFormData((prev) => ({ ...prev, photoUrl: uploadedUrl }));
+        } else {
+          throw new Error(res?.message || 'Gagal mengunggah foto');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Gagal mengunggah foto jemaat');
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+        setUploadingPhoto(false);
+        if (photoInputRef.current) photoInputRef.current.value = '';
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setUploadingPhoto(false);
+      setError('Foto tidak dapat dibaca. Coba berkas gambar lain.');
+    };
+    img.src = objectUrl;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadingPhoto) {
+      setError('Tunggu hingga foto selesai diunggah, lalu simpan kembali.');
+      setActiveTab('diri');
+      return;
+    }
     if (!formData.fullName || formData.fullName.trim().length < 2) {
       setError('Nama lengkap wajib diisi minimal 2 karakter');
       setActiveTab('diri');
@@ -200,6 +263,54 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
           {/* Tab 1: Data Diri */}
           {activeTab === 'diri' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Foto Jemaat (tampil pada kartu anggota) */}
+              <div className="sm:col-span-2 flex flex-col sm:flex-row items-center gap-4 p-4 rounded-2xl border border-slate-700/70 bg-[#050811]/70">
+                <div className="w-24 h-32 shrink-0 rounded-xl overflow-hidden border border-amber-500/40 bg-slate-900 flex items-center justify-center">
+                  {formData.photoUrl ? (
+                    <img src={formData.photoUrl} alt="Foto jemaat" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-slate-500 p-2 text-center">
+                      <Camera className="w-7 h-7" />
+                      <span className="text-[10px] leading-tight">Belum ada foto</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <p className="font-bold text-slate-100 text-sm">Foto Jemaat</p>
+                  <p className="text-slate-400 text-[11px] leading-relaxed mt-1">
+                    Foto ini akan tampil pada <span className="text-amber-300 font-semibold">kartu anggota jemaat</span> saat dicetak.
+                    Gunakan pas foto 3x4 berlatar polos (JPG/PNG/WebP). Foto otomatis dipotong &amp; dikompresi.
+                  </p>
+                  <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-3">
+                    <button
+                      type="button"
+                      disabled={uploadingPhoto}
+                      onClick={() => photoInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold disabled:opacity-60 cursor-pointer"
+                    >
+                      {uploadingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                      {uploadingPhoto ? 'Mengunggah...' : formData.photoUrl ? 'Ganti Foto' : 'Unggah Foto'}
+                    </button>
+                    {formData.photoUrl && !uploadingPhoto && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, photoUrl: '' }))}
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-950/70 border border-red-500/40 text-red-300 text-[11px] font-bold hover:bg-red-900/60 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" /> Hapus Foto
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => handlePhotoFile(e.target.files?.[0])}
+                  />
+                </div>
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-slate-300 mb-1">
                   Nama Lengkap (Sesuai Akta / KTP) *
@@ -209,7 +320,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   required
                   value={formData.fullName}
                   onChange={(e) => handleChange('fullName', e.target.value)}
-                  placeholder="Contoh: Daniel Christian Tefa"
+                  placeholder="Nama lengkap jemaat"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white focus:border-amber-400 outline-none"
                 />
               </div>
@@ -222,7 +333,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   type="text"
                   value={formData.nickname || ''}
                   onChange={(e) => handleChange('nickname', e.target.value)}
-                  placeholder="Contoh: Dani"
+                  placeholder="Nama panggilan"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white focus:border-amber-400 outline-none"
                 />
               </div>
@@ -647,7 +758,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   type="text"
                   value={formData.spouseName || ''}
                   onChange={(e) => handleChange('spouseName', e.target.value)}
-                  placeholder="Contoh: Maria Tefa-Bello"
+                  placeholder="Nama suami/istri"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white focus:border-amber-400 outline-none"
                 />
               </div>

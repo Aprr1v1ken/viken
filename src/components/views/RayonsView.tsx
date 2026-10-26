@@ -1,23 +1,153 @@
 import React, { useState } from 'react';
-import { MapPin, Users, Home, Phone, Layers, ChevronRight, Award } from 'lucide-react';
+import { MapPin, Users, Home, Phone, Layers, ChevronRight, Award, Plus, Pencil, Trash2, X, Save, AlertCircle } from 'lucide-react';
 import type { Rayon, CategorialGroup, Member } from '../../types/index.ts';
 
 interface RayonsViewProps {
   rayons: Rayon[];
   categorials: CategorialGroup[];
   members: Member[];
+  defaultTab?: 'rayons' | 'categorials';
   onSelectMember: (member: Member) => void;
+  onSaveRayon: (data: Partial<Rayon>, id?: string) => Promise<any>;
+  onDeleteRayon: (id: string) => Promise<any>;
+  onSaveCategorial: (data: Partial<CategorialGroup>, id?: string) => Promise<any>;
+  onDeleteCategorial: (id: string) => Promise<any>;
 }
 
 export const RayonsView: React.FC<RayonsViewProps> = ({
   rayons,
   categorials,
   members,
+  defaultTab = 'rayons',
   onSelectMember,
+  onSaveRayon,
+  onDeleteRayon,
+  onSaveCategorial,
+  onDeleteCategorial,
 }) => {
-  const [activeTab, setActiveTab] = useState<'rayons' | 'categorials'>('rayons');
+  const [activeTab, setActiveTab] = useState<'rayons' | 'categorials'>(defaultTab);
   const [selectedRayonId, setSelectedRayonId] = useState<string>(rayons[0]?.id || 'r1');
   const [selectedCatId, setSelectedCatId] = useState<string>(categorials[0]?.id || 'c1');
+
+  // Formulir rayon/kategorial (tambah & ubah)
+  const [modalKind, setModalKind] = useState<'rayon' | 'cat' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [fCode, setFCode] = useState('');
+  const [fName, setFName] = useState('');
+  const [fLeaderName, setFLeaderName] = useState('');
+  const [fLeaderPhone, setFLeaderPhone] = useState('');
+  const [fCoverage, setFCoverage] = useState('');
+  const [fNotes, setFNotes] = useState('');
+  const [fTarget, setFTarget] = useState('');
+  const [fCoordinator, setFCoordinator] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const openAddRayon = () => {
+    setEditingId(null);
+    setFCode('');
+    setFName('');
+    setFLeaderName('');
+    setFLeaderPhone('');
+    setFCoverage('');
+    setFNotes('');
+    setError('');
+    setModalKind('rayon');
+  };
+
+  const openEditRayon = (r: Rayon) => {
+    setEditingId(r.id);
+    setFCode(r.code);
+    setFName(r.name);
+    setFLeaderName(r.leaderName || '');
+    setFLeaderPhone(r.leaderPhone || '');
+    setFCoverage(r.coverageArea || '');
+    setFNotes(r.notes || '');
+    setError('');
+    setModalKind('rayon');
+  };
+
+  const openAddCat = () => {
+    setEditingId(null);
+    setFCode('');
+    setFName('');
+    setFTarget('');
+    setFCoordinator('');
+    setError('');
+    setModalKind('cat');
+  };
+
+  const openEditCat = (c: CategorialGroup) => {
+    setEditingId(c.id);
+    setFCode(c.code);
+    setFName(c.name);
+    setFTarget(c.targetAgeDesc || '');
+    setFCoordinator(c.coordinator || '');
+    setError('');
+    setModalKind('cat');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fCode.trim() || !fName.trim()) {
+      setError('Kode dan nama wajib diisi.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const res =
+        modalKind === 'rayon'
+          ? await onSaveRayon(
+              {
+                code: fCode.trim(),
+                name: fName.trim(),
+                leaderName: fLeaderName,
+                leaderPhone: fLeaderPhone,
+                coverageArea: fCoverage,
+                notes: fNotes,
+              },
+              editingId || undefined
+            )
+          : await onSaveCategorial(
+              {
+                code: fCode.trim(),
+                name: fName.trim(),
+                targetAgeDesc: fTarget,
+                coordinator: fCoordinator,
+              },
+              editingId || undefined
+            );
+      if (res && res.success === false) throw new Error(res.message || 'Gagal menyimpan data');
+      setModalKind(null);
+    } catch (err: any) {
+      setError(err.message || 'Gagal menyimpan data');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRayon = async (r: Rayon) => {
+    if (!window.confirm(`Hapus rayon "${r.name}" (${r.code})?\n\nRayon hanya dapat dihapus bila tidak ada lagi jemaat/KK yang terikat padanya.`)) return;
+    try {
+      const res = await onDeleteRayon(r.id);
+      if (res && res.success === false) alert(res.message || 'Rayon tidak dapat dihapus');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
+
+  const handleDeleteCat = async (c: CategorialGroup) => {
+    if (!window.confirm(`Hapus kelompok kategorial "${c.name}" (${c.code})?\n\nKelompok hanya dapat dihapus bila tidak ada lagi jemaat yang tergabung di dalamnya.`)) return;
+    try {
+      const res = await onDeleteCategorial(c.id);
+      if (res && res.success === false) alert(res.message || 'Kelompok tidak dapat dihapus');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
 
   const selectedRayon = rayons.find((r) => r.id === selectedRayonId) || rayons[0];
   const rayonMembers = members.filter((m) => m.rayonId === selectedRayon?.id);
@@ -48,7 +178,7 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            5 Rayon Wilayah
+            {rayons.length} Rayon Wilayah
           </button>
           <button
             onClick={() => setActiveTab('categorials')}
@@ -67,9 +197,22 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Rayon List Selector */}
           <div className="lg:col-span-1 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 px-1">
-              Daftar Rayon Pelayanan
-            </h3>
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                Daftar Rayon Pelayanan
+              </h3>
+              <button
+                onClick={openAddRayon}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Tambah Rayon
+              </button>
+            </div>
+            {rayons.length === 0 && (
+              <div className="p-5 rounded-xl bg-[#0c1329] border border-dashed border-slate-700 text-center text-xs text-slate-400">
+                Belum ada rayon. Buat rayon pertama agar data jemaat dapat dikelompokkan per wilayah.
+              </div>
+            )}
             <div className="space-y-2">
               {rayons.map((r) => {
                 const count = members.filter((m) => m.rayonId === r.id).length;
@@ -115,6 +258,20 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
                     <div className="text-right">
                       <span className="text-2xl font-mono font-bold text-amber-300">{rayonMembers.length}</span>
                       <span className="text-xs text-slate-400 block">Jiwa Jemaat</span>
+                      <span className="inline-flex gap-1.5 mt-2">
+                        <button
+                          onClick={() => openEditRayon(selectedRayon)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Ubah Rayon
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRayon(selectedRayon)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        </button>
+                      </span>
                     </div>
                   </div>
 
@@ -148,10 +305,15 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
                           onClick={() => onSelectMember(m)}
                           className="p-3 px-4 flex items-center justify-between text-xs hover:bg-slate-800/50 cursor-pointer transition-colors"
                         >
-                          <div>
+                          <div className="flex items-center gap-3">
+                            {m.photoUrl && (
+                              <img src={m.photoUrl} alt={m.fullName} className="w-8 h-10 object-cover rounded border border-amber-500/30" />
+                            )}
+                            <div>
                             <div className="font-semibold text-white">{m.fullName}</div>
                             <div className="text-[11px] text-slate-400">
                               {m.memberNo} · {m.familyRole} · {m.gender}
+                            </div>
                             </div>
                           </div>
                           <div className="text-right">
@@ -169,6 +331,23 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
         </div>
       ) : (
         /* Kategorial View */
+        <>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 px-1">
+              Kelompok Kategorial Fungsional
+            </h3>
+            <button
+              onClick={openAddCat}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> Tambah Kategorial
+            </button>
+          </div>
+          {categorials.length === 0 && (
+            <div className="p-6 rounded-xl bg-[#0c1329] border border-dashed border-slate-700 text-center text-xs text-slate-400">
+              Belum ada kelompok kategorial (mis. PAR, Pemuda, Kaum Bapak (marga), Kaum Ibu (marga), Lansia).
+            </div>
+          )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {categorials.map((cat) => {
             const catMembersList = members.filter((m) => m.categorialGroupId === cat.id);
@@ -197,6 +376,9 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
 
                 <div className="pt-3 border-t border-slate-800">
                   <span className="text-[11px] text-slate-400 block mb-2 font-medium">Contoh Anggota:</span>
+                  {catMembersList.length === 0 && (
+                    <div className="text-[11px] text-slate-500 mb-2">Belum ada anggota.</div>
+                  )}
                   <div className="space-y-1">
                     {catMembersList.slice(0, 3).map((cm) => (
                       <div
@@ -213,10 +395,167 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
                       </div>
                     )}
                   </div>
+                  <div className="flex justify-end gap-1.5 mt-3 pt-3 border-t border-slate-800">
+                    <button
+                      onClick={() => openEditCat(cat)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Ubah
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCat(cat)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Hapus
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+        </>
+      )}
+
+      {/* Modal Tambah/Ubah Rayon & Kategorial */}
+      {modalKind && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-amber-300">
+                {modalKind === 'rayon'
+                  ? editingId
+                    ? 'Ubah Rayon Pelayanan'
+                    : 'Tambah Rayon Pelayanan'
+                  : editingId
+                  ? 'Ubah Kelompok Kategorial'
+                  : 'Tambah Kelompok Kategorial'}
+              </h3>
+              <button onClick={() => setModalKind(null)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Kode *</label>
+                  <input
+                    type="text"
+                    required
+                    value={fCode}
+                    onChange={(e) => setFCode(e.target.value)}
+                    placeholder={modalKind === 'rayon' ? 'R1' : 'PAR'}
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none font-mono focus:border-amber-400"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-semibold text-slate-300 mb-1">Nama *</label>
+                  <input
+                    type="text"
+                    required
+                    value={fName}
+                    onChange={(e) => setFName(e.target.value)}
+                    placeholder={modalKind === 'rayon' ? 'Nama rayon' : 'Nama kelompok kategorial'}
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {modalKind === 'rayon' ? (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Penatua/Koordinator Rayon</label>
+                    <input
+                      type="text"
+                      value={fLeaderName}
+                      onChange={(e) => setFLeaderName(e.target.value)}
+                      placeholder="Nama penatua koordinator"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">No. HP Koordinator</label>
+                    <input
+                      type="text"
+                      value={fLeaderPhone}
+                      onChange={(e) => setFLeaderPhone(e.target.value)}
+                      placeholder="08xx-xxxx-xxxx"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Wilayah Cakupan</label>
+                    <input
+                      type="text"
+                      value={fCoverage}
+                      onChange={(e) => setFCoverage(e.target.value)}
+                      placeholder="Dusun/RT/RW yang dicakup"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Catatan</label>
+                    <input
+                      type="text"
+                      value={fNotes}
+                      onChange={(e) => setFNotes(e.target.value)}
+                      placeholder="Catatan tambahan"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Kelompok Sasaran / Usia</label>
+                    <input
+                      type="text"
+                      value={fTarget}
+                      onChange={(e) => setFTarget(e.target.value)}
+                      placeholder="Mis. Anak usia 0-12 tahun"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Koordinator / Ketua</label>
+                    <input
+                      type="text"
+                      value={fCoordinator}
+                      onChange={(e) => setFCoordinator(e.target.value)}
+                      placeholder="Nama koordinator kelompok"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setModalKind(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold disabled:opacity-50 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  {saving ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Simpan'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

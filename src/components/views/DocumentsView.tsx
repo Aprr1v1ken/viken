@@ -1,25 +1,59 @@
 import React, { useState } from 'react';
-import { FolderArchive, Plus, Search, FileText, Download, ShieldCheck, Lock } from 'lucide-react';
+import { FolderArchive, Plus, Search, FileText, Download, ShieldCheck, Lock, Pencil, Trash2 } from 'lucide-react';
 import type { DocumentRecord } from '../../types/index.ts';
 
 interface DocumentsViewProps {
   documents: DocumentRecord[];
-  onAddDocument: (data: Partial<DocumentRecord>) => Promise<void>;
+  onSaveDocument: (data: Partial<DocumentRecord>, id?: string) => Promise<any>;
+  onDeleteDocument: (id: string) => Promise<any>;
 }
 
 export const DocumentsView: React.FC<DocumentsViewProps> = ({
   documents,
-  onAddDocument,
+  onSaveDocument,
+  onDeleteDocument,
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<DocumentRecord | null>(null);
+
+  const openAdd = () => {
+    setEditing(null);
+    setTitle('');
+    setCategory('Warta Jemaat');
+    setAccessLevel('Publik');
+    setFileName('');
+    setFileSize('');
+    setShowModal(true);
+  };
+
+  const openEdit = (d: DocumentRecord) => {
+    setEditing(d);
+    setTitle(d.title);
+    setCategory(d.category);
+    setAccessLevel(d.accessLevel);
+    setFileName(d.fileName || '');
+    setFileSize(d.fileSize || '');
+    setShowModal(true);
+  };
+
+  const handleDelete = async (d: DocumentRecord) => {
+    if (!window.confirm(`Hapus arsip dokumen "${d.title}" (${d.docNo})?`)) return;
+    try {
+      const res = await onDeleteDocument(d.id);
+      if (res && res.success === false) alert(res.message || 'Gagal menghapus dokumen');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<any>('Warta Gereja');
+  const [category, setCategory] = useState<any>('Warta Jemaat');
   const [accessLevel, setAccessLevel] = useState<any>('Publik');
   const [fileName, setFileName] = useState('');
-  const [fileSize, setFileSize] = useState('1.5 MB');
+  const [fileSize, setFileSize] = useState('');
   const [saving, setSaving] = useState(false);
 
   const filtered = documents.filter((d) => {
@@ -38,18 +72,25 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     if (!title.trim()) return;
     setSaving(true);
     try {
-      await onAddDocument({
-        title,
-        category,
-        accessLevel,
-        fileName: fileName || `${title.replace(/\s+/g, '_')}.pdf`,
-        fileSize,
-      });
+      const res = await onSaveDocument(
+        {
+          title,
+          category,
+          accessLevel,
+          fileName: fileName || `${title.replace(/\s+/g, '_')}.pdf`,
+          fileSize: fileSize || editing?.fileSize || '-',
+          memberId: editing?.memberId,
+        },
+        editing?.id
+      );
+      if (res && res.success === false) {
+        alert(res.message || 'Gagal menyimpan dokumen');
+        return;
+      }
       setShowModal(false);
-      setTitle('');
-      setFileName('');
     } catch (err) {
       console.error(err);
+      alert('Gagal menyimpan. Periksa koneksi lalu coba lagi.');
     } finally {
       setSaving(false);
     }
@@ -57,7 +98,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
 
   const handleDownload = (doc: DocumentRecord) => {
     // Generate a simple client downloadable text blob representation of the church document
-    const content = `GEREJA MASEHI INJILI DI TIMOR (GMIT)\nKLASIS ALOR BARAT DAYA - JEMAAT BETEL FUIMELANG\n\nDOKUMEN RESMI GEREJA\nNomor: ${doc.docNo}\nJudul: ${doc.title}\nKategori: ${doc.category}\nTingkat Akses: ${doc.accessLevel}\nTanggal Unggah: ${doc.uploadDate}\n\nDokumen ini merupakan arsip terverifikasi dalam Sistem Informasi Manajemen Jemaat dan Gereja (SYSJEGER V2.0).`;
+    const content = `GEREJA MASEHI INJILI DI TIMOR (GMIT)\nKLASIS ALOR TENGAH UTARA - JEMAAT BETEL FUIMELANG\n\nDOKUMEN RESMI GEREJA\nNomor: ${doc.docNo}\nJudul: ${doc.title}\nKategori: ${doc.category}\nTingkat Akses: ${doc.accessLevel}\nTanggal Unggah: ${doc.uploadDate}\n\nDokumen ini merupakan arsip terverifikasi dalam Sistem Informasi Manajemen Jemaat dan Gereja (SYSJEGER V2.0).`;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -82,7 +123,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openAdd}
           className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -114,7 +155,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
             <option value="Surat Sidi">Surat Sidi</option>
             <option value="Surat Nikah Gerejawi">Surat Nikah Gerejawi</option>
             <option value="Surat Pindah">Surat Pindah (Atestasi)</option>
-            <option value="Warta Gereja">Warta Gereja</option>
+            <option value="Warta Jemaat">Warta Jemaat</option>
             <option value="SK Majelis">SK Majelis</option>
             <option value="Laporan Keuangan">Laporan Keuangan</option>
             <option value="Lainnya">Lainnya</option>
@@ -138,6 +179,13 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                    Belum ada dokumen digital yang diarsipkan.
+                  </td>
+                </tr>
+              )}
               {filtered.map((d) => (
                 <tr key={d.id} className="hover:bg-slate-800/40">
                   <td className="py-3 px-4 font-mono font-medium text-amber-300">{d.docNo}</td>
@@ -175,14 +223,26 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                       <span>{d.accessLevel}</span>
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
                     <button
                       onClick={() => handleDownload(d)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors mr-1.5"
                       title="Unduh Berkas"
                     >
                       <Download className="w-3.5 h-3.5 text-amber-400" />
                       <span>Unduh</span>
+                    </button>
+                    <button
+                      onClick={() => openEdit(d)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold mr-1.5 cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Ubah
+                    </button>
+                    <button
+                      onClick={() => handleDelete(d)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Hapus
                     </button>
                   </td>
                 </tr>
@@ -197,7 +257,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
             <h3 className="text-base font-bold text-amber-300">
-              Registrasi Dokumen Digital
+              {editing ? 'Ubah Dokumen Digital' : 'Registrasi Dokumen Digital'}
             </h3>
 
             <form onSubmit={handleSave} className="space-y-3">
@@ -208,7 +268,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Contoh: Tata Ibadah Bulan Keluarga 2026"
+                  placeholder="Judul dokumen"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
                 />
               </div>
@@ -250,7 +310,18 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                   type="text"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
-                  placeholder="Contoh: Dokumen_Tata_Ibadah_2026.pdf"
+                  placeholder="NamaBerkas.pdf"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Ukuran Berkas (mis. 1.5 MB)</label>
+                <input
+                  type="text"
+                  value={fileSize}
+                  onChange={(e) => setFileSize(e.target.value)}
+                  placeholder="-"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none font-mono"
                 />
               </div>
@@ -268,7 +339,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                   disabled={saving}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
                 >
-                  {saving ? 'Menyimpan...' : 'Simpan Dokumen'}
+                  {saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Simpan Dokumen'}
                 </button>
               </div>
             </form>

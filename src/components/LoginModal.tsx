@@ -145,56 +145,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </button>
           </form>
 
-          {/* Quick Preset Selector */}
+          {/* Akun awal (hanya tampil sebagai petunjuk masuk pertama kali) */}
           <div className="pt-3 border-t border-slate-800 space-y-2">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">
-              Akun Demo — klik untuk mengisi formulir:
+              Masuk Pertama Kali
             </div>
+            <button
+              type="button"
+              onClick={() => handleQuickSelect('superadmin', 'admin123')}
+              className="w-full p-2.5 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white text-[11px]"
+            >
+              <div className="font-bold text-amber-400">Super Admin (akun bawaan awal)</div>
+              <div className="text-[10px] text-slate-400">Username: superadmin · Kata Sandi: admin123 — klik untuk mengisi formulir</div>
+            </button>
             <p className="text-[10px] text-amber-500/90 text-center leading-relaxed">
-              Kata sandi demo wajib diganti sebelum situs dipakai resmi (lihat README).
+              Segera ganti kata sandi bawaan setelah masuk (menu profil → Ganti Kata Sandi), lalu buat akun untuk pengurus lain di menu Manajemen Pengguna.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('superadmin', 'admin123')}
-                className="p-2 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white"
-              >
-                <div className="font-bold text-amber-400">Super Admin</div>
-                <div className="text-[10px] text-slate-400">admin / full control</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('admingereja', 'admin123')}
-                className="p-2 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white"
-              >
-                <div className="font-bold text-amber-400">Admin Gereja</div>
-                <div className="text-[10px] text-slate-400">Tata Usaha Jemaat</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('pendeta', 'pendeta123')}
-                className="p-2 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white"
-              >
-                <div className="font-bold text-amber-400">Ketua Majelis</div>
-                <div className="text-[10px] text-slate-400">Pdt. Abraham M. Tefa</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('majelisrayon1', 'rayon123')}
-                className="p-2 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white"
-              >
-                <div className="font-bold text-amber-400">Majelis Rayon 1</div>
-                <div className="text-[10px] text-slate-400">Pnt. Yulius B.</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('jemaat1', 'jemaat123')}
-                className="col-span-2 p-2 text-left rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white"
-              >
-                <div className="font-bold text-amber-400">Warga Jemaat (Yohanis Tefa)</div>
-                <div className="text-[10px] text-slate-400">Akses Portal Jemaat & Kartu Anggota Digital</div>
-              </button>
-            </div>
           </div>
         </div>
       </div>

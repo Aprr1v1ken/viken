@@ -1,26 +1,66 @@
 import React, { useState } from 'react';
-import { CheckSquare, Plus, Users, Calendar, Printer } from 'lucide-react';
+import { CheckSquare, Plus, Printer, Pencil, Trash2 } from 'lucide-react';
+import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { AttendanceRecord } from '../../types/index.ts';
 
 interface AttendanceViewProps {
   attendance: AttendanceRecord[];
-  onAddAttendance: (data: Partial<AttendanceRecord>) => Promise<void>;
+  onSaveAttendance: (data: Partial<AttendanceRecord>, id?: string) => Promise<any>;
+  onDeleteAttendance: (id: string) => Promise<any>;
   onOpenPrintReport: () => void;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
   attendance,
-  onAddAttendance,
+  onSaveAttendance,
+  onDeleteAttendance,
   onOpenPrintReport,
 }) => {
   const [showModal, setShowModal] = useState(false);
-  const [eventTitle, setEventTitle] = useState('Kebaktian Minggu Pagi I');
-  const [date, setDate] = useState('18-10-2026');
-  const [maleCount, setMaleCount] = useState<number>(115);
-  const [femaleCount, setFemaleCount] = useState<number>(140);
-  const [childrenCount, setChildrenCount] = useState<number>(30);
-  const [notes, setNotes] = useState('Ibadah berlangsung tertib');
+  const [editing, setEditing] = useState<AttendanceRecord | null>(null);
+  const [eventTitle, setEventTitle] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
+  const [maleCount, setMaleCount] = useState<number>(0);
+  const [femaleCount, setFemaleCount] = useState<number>(0);
+  const [childrenCount, setChildrenCount] = useState<number>(0);
+  const [notes, setNotes] = useState('');
+  const [recordedBy, setRecordedBy] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const openAdd = () => {
+    setEditing(null);
+    setEventTitle('');
+    setDate(new Date().toISOString().substring(0, 10));
+    setMaleCount(0);
+    setFemaleCount(0);
+    setChildrenCount(0);
+    setNotes('');
+    setRecordedBy('');
+    setShowModal(true);
+  };
+
+  const openEdit = (att: AttendanceRecord) => {
+    setEditing(att);
+    setEventTitle(att.eventTitle || '');
+    setDate(att.date || '');
+    setMaleCount(att.maleCount || 0);
+    setFemaleCount(att.femaleCount || 0);
+    setChildrenCount(att.childrenCount || 0);
+    setNotes(att.notes || '');
+    setRecordedBy(att.recordedBy || '');
+    setShowModal(true);
+  };
+
+  const handleDelete = async (att: AttendanceRecord) => {
+    if (!window.confirm(`Hapus catatan absensi "${att.eventTitle}" tanggal ${formatDateDMY(att.date)}?`)) return;
+    try {
+      const res = await onDeleteAttendance(att.id);
+      if (res && res.success === false) alert(res.message || 'Gagal menghapus absensi');
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghapus. Periksa koneksi lalu coba lagi.');
+    }
+  };
 
   const totalCalculated = Number(maleCount) + Number(femaleCount) + Number(childrenCount);
 
@@ -28,19 +68,28 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     e.preventDefault();
     setSaving(true);
     try {
-      await onAddAttendance({
-        eventTitle,
-        date,
-        maleCount: Number(maleCount),
-        femaleCount: Number(femaleCount),
-        childrenCount: Number(childrenCount),
-        totalCount: totalCalculated,
-        notes,
-        recordedBy: 'Tata Usaha / Dkn. Elisabeth Lopo',
-      });
+      const res = await onSaveAttendance(
+        {
+          eventId: editing?.eventId || '',
+          eventTitle,
+          date,
+          maleCount: Number(maleCount),
+          femaleCount: Number(femaleCount),
+          childrenCount: Number(childrenCount),
+          totalCount: totalCalculated,
+          notes,
+          recordedBy,
+        },
+        editing?.id
+      );
+      if (res && res.success === false) {
+        alert(res.message || 'Gagal menyimpan absensi');
+        return;
+      }
       setShowModal(false);
     } catch (err) {
       console.error(err);
+      alert('Gagal menyimpan. Periksa koneksi lalu coba lagi.');
     } finally {
       setSaving(false);
     }
@@ -62,7 +111,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={openAdd}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -87,7 +136,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                {att.date}
+                {formatDateDMY(att.date)}
               </span>
               <span className="text-xs text-slate-400">GMIT Betel</span>
             </div>
@@ -110,17 +159,39 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
             <div className="text-xs text-slate-400 pt-1">
               Catatan: <span className="text-slate-300 italic">{att.notes || '-'}</span>
+              {att.recordedBy && <span className="block mt-0.5">Dicatat oleh: {att.recordedBy}</span>}
+            </div>
+
+            <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => openEdit(att)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Ubah
+              </button>
+              <button
+                onClick={() => handleDelete(att)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 text-[11px] font-semibold hover:bg-red-900/50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Hapus
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {attendance.length === 0 && (
+        <div className="p-8 rounded-2xl bg-[#0c1329] border border-dashed border-slate-700 text-center text-sm text-slate-400">
+          Belum ada catatan absensi. Klik <span className="text-amber-300 font-semibold">+ Catat Absensi Ibadah</span> setelah ibadah selesai.
+        </div>
+      )}
 
       {/* Add Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
             <h3 className="text-base font-bold text-amber-300">
-              Input Absensi Kehadiran Ibadah
+              {editing ? 'Ubah Absensi Kehadiran Ibadah' : 'Input Absensi Kehadiran Ibadah'}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -137,9 +208,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Tanggal Ibadah (DD-MM-YYYY) *</label>
+                <label className="block font-semibold text-slate-300 mb-1">Tanggal Ibadah *</label>
                 <input
-                  type="text"
+                  type="date"
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
@@ -196,6 +267,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Dicatat Oleh</label>
+                <input
+                  type="text"
+                  value={recordedBy}
+                  onChange={(e) => setRecordedBy(e.target.value)}
+                  placeholder="Nama petugas pencatat absensi"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -209,7 +291,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   disabled={saving}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
                 >
-                  {saving ? 'Menyimpan...' : 'Simpan Absensi'}
+                  {saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Simpan Absensi'}
                 </button>
               </div>
             </form>

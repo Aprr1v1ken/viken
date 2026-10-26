@@ -28,6 +28,7 @@ const VIEW_TITLES: Record<string, string> = {
   documents: 'Arsip & Dokumen Digital Gereja',
   reports: 'Pusat Laporan & Format Cetak Resmi A4',
   portal: 'Portal Pelayanan Khusus Warga Jemaat',
+  users: 'Manajemen Pengguna & Hak Akses',
   backup: 'Cadangan & Pemulihan Database',
   audit: 'Audit Trail Aktivitas Sistem',
 };

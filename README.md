@@ -12,8 +12,9 @@ Satu aplikasi berisi dua bagian:
 2. **Dashboard SYSJEGER** — sistem administrasi untuk majelis & tata usaha
    (wajib login): data jemaat, kartu keluarga, rayon & kategorial,
    presbiter, sakramen (baptis/sidi/nikah), mutasi, jadwal & petugas ibadah,
-   absensi, keuangan kas, dokumen, warta, laporan cetak A4 & kartu anggota,
-   portal jemaat, pelacak ulang tahun, impor data, backup, dan log audit.
+   absensi, keuangan kas, dokumen, warta, laporan cetak A4 & kartu anggota
+   berfoto, portal jemaat, manajemen pengguna, pelacak ulang tahun, impor
+   data, backup, dan log audit.
 
 ## Teknologi
 
@@ -51,25 +52,30 @@ Perintah lain: `npm test` (tes logika gereja & autentikasi),
 
 ## Akun awal
 
-Database bawaan (`sysjeger.sqlite`) sudah berisi data percontohan jemaat
-Betel Fuimelang dan akun-akun berikut. Akun yang sama dapat dipilih cepat
-pada jendela login ("Akun Demo").
+Database bawaan (`sysjeger.sqlite`) **bersih tanpa data contoh** — hanya
+berisi satu akun pemilik berikut agar dapat masuk pertama kali:
 
-| Username        | Kata sandi awal | Peran                  |
-| --------------- | --------------- | ---------------------- |
-| `superadmin`    | `admin123`      | Super Admin            |
-| `admingereja`   | `admin123`      | Admin Gereja (TU)      |
-| `pendeta`       | `pendeta123`    | Ketua Majelis/Pendeta  |
-| `majelisrayon1` | `rayon123`      | Majelis/Rayon I        |
-| `jemaat1`       | `jemaat123`     | Jemaat (Portal Jemaat) |
+| Username     | Kata sandi awal | Peran       |
+| ------------ | --------------- | ----------- |
+| `superadmin` | `admin123`      | Super Admin |
+
+Super Admin dapat membuat, mengubah, menonaktifkan, dan menghapus **semua
+data** dalam aplikasi, termasuk akun pengguna lain (Admin Gereja, Ketua
+Majelis/Pendeta, Majelis/Rayon, dan Jemaat untuk Portal Jemaat) melalui
+menu **Manajemen Pengguna**. Data diri jemaat dapat dilengkapi **foto**
+(unggah pas foto pada formulir jemaat) yang otomatis tampil pada kartu
+anggota jemaat saat dicetak; berkas foto tersimpan pada folder `uploads/`.
+
+Urutan mengisi data awal yang disarankan: Rayon & Kategorial → Kartu
+Keluarga → Data Jemaat (+ foto) → Majelis & Pendeta → Sakramen dan modul
+pelayanan lainnya.
 
 > ⚠️ **Wajib sebelum dipakai resmi:**
-> 1. Masuk dengan setiap akun lalu ganti kata sandinya melalui tombol
->    gembok **“Ganti Kata Sandi”** di kanan atas dashboard.
+> 1. Masuk sebagai `superadmin` lalu segera ganti kata sandinya melalui
+>    tombol gembok **“Ganti Kata Sandi”** di kanan atas dashboard.
 > 2. Atur `SESSION_SECRET` pada berkas `.env`.
-> 3. Ganti data percontohan (jemaat, foto, nomor WhatsApp, jadwal ibadah
->    pada `src/components/PublicLanding.tsx`) dengan data gereja yang
->    sebenarnya bila berbeda.
+> 3. Sesuaikan isi situs publik (nomor WhatsApp sekretariat, jadwal ibadah
+>    pada `src/components/PublicLanding.tsx`) dengan keadaan jemaat.
 
 ## Keamanan (ringkasan)
 
@@ -99,6 +105,7 @@ pada jendela login ("Akun Demo").
 | `PORT`             | `3000`             | Port server produksi                        |
 | `SESSION_SECRET`   | *(kunci dev + peringatan)* | Kunci token sesi — wajib diubah di produksi |
 | `SYSJEGER_DB_PATH` | `./sysjeger.sqlite` | Lokasi berkas database SQLite              |
+| `SYSJEGER_UPLOADS_DIR` | `./uploads` | Folder penyimpanan foto jemaat yang diunggah |
 | `FRAME_ANCESTORS`  | *(tidak dibatasi)* | Domain yang boleh menyematkan situs sebagai iframe (kosongkan agar pratinjau semacam Arena Live Preview berfungsi; contoh ketat: `'self'`) |
 | `ACCESS_LOG`       | nyala               | Atur `off` untuk mematikan log akses server |
 
@@ -111,7 +118,8 @@ server.ts               Server produksi (Express + berkas statis dist/)
 server/
   api.ts                Seluruh rute API REST
   auth.ts               Hash kata sandi, token sesi, middleware RBAC
-  db.ts                 Skema SQLite, migrasi, data awal (seed)
+  db.ts                 Skema SQLite, migrasi, akun awal Super Admin
+  uploads.ts            Penyimpanan & validasi foto jemaat
 src/
   App.tsx               Rangka aplikasi: web publik ⇄ dashboard
   components/           Komponen UI (modal, sidebar, tiap menu di views/)
@@ -119,7 +127,8 @@ src/
   services/api.ts       Lapisan pemanggil API + pengelolaan sesi
   types/index.ts        Definisi tipe data gereja
   utils/church-logic.ts Logika bisnis (umur, statistik, validasi, format)
-sysjeger.sqlite         Database (berisi data percontohan siap pakai)
+sysjeger.sqlite         Database (keadaan awal bersih, hanya akun Super Admin)
+uploads/                Berkas foto jemaat yang diunggah (dibuat otomatis)
 ```
 
 ## Catatan data

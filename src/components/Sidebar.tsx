@@ -47,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Menu disesuaikan dengan hak akses peran yang sedang masuk.
   const role = currentUser?.role;
   const canSeeBackup = role === 'Super Admin' || role === 'Admin Gereja';
+  const canSeeUsers = role === 'Super Admin';
   const canSeeAudit = canSeeBackup || role === 'Ketua Majelis/Pendeta';
   const isJemaat = role === 'Jemaat';
 
@@ -84,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'PORTAL & SISTEM',
       items: [
         { id: 'portal', label: 'Portal Khusus Jemaat', icon: UserCheck },
+        { id: 'users', label: 'Manajemen Pengguna', icon: ShieldAlert },
         { id: 'backup', label: 'Impor & Backup Data', icon: Database },
         { id: 'audit', label: 'Log Aktivitas Sistem', icon: History },
       ],
@@ -100,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : menuSections.map((section) => ({
         ...section,
         items: section.items.filter((item) => {
+          if (item.id === 'users') return canSeeUsers;
           if (item.id === 'backup') return canSeeBackup;
           if (item.id === 'audit') return canSeeAudit;
           return true;

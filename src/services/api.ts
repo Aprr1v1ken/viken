@@ -12,7 +12,10 @@ import type {
   FinancialTransaction,
   DocumentRecord,
   Announcement,
+  Rayon,
+  CategorialGroup,
   User,
+  UserRole,
 } from '../types/index.ts';
 
 const API_BASE = '/api';
@@ -121,6 +124,14 @@ function postJson(path: string, data: unknown) {
   return apiFetch(path, { method: 'POST', body: JSON.stringify(data ?? {}) });
 }
 
+function putJson(path: string, data: unknown) {
+  return apiFetch(path, { method: 'PUT', body: JSON.stringify(data ?? {}) });
+}
+
+function deleteJson(path: string) {
+  return apiFetch(path, { method: 'DELETE' });
+}
+
 /* ------------------------------------------------------------------ */
 /* Autentikasi & data publik                                           */
 /* ------------------------------------------------------------------ */
@@ -199,6 +210,42 @@ export async function deleteFamilyApi(id: string) {
   return apiFetch(`/families/${id}`, { method: 'DELETE' });
 }
 
+export async function updateFamilyApi(id: string, data: Partial<Family>) {
+  return putJson(`/families/${id}`, data);
+}
+
+export async function createRayonApi(data: Partial<Rayon>) {
+  return postJson('/rayons', data);
+}
+
+export async function updateRayonApi(id: string, data: Partial<Rayon>) {
+  return putJson(`/rayons/${id}`, data);
+}
+
+export async function deleteRayonApi(id: string) {
+  return deleteJson(`/rayons/${id}`);
+}
+
+export async function createCategorialApi(data: Partial<CategorialGroup>) {
+  return postJson('/categorials', data);
+}
+
+export async function updateCategorialApi(id: string, data: Partial<CategorialGroup>) {
+  return putJson(`/categorials/${id}`, data);
+}
+
+export async function deleteCategorialApi(id: string) {
+  return deleteJson(`/categorials/${id}`);
+}
+
+export async function updateStaffApi(id: string, data: Partial<ChurchStaff>) {
+  return putJson(`/staff/${id}`, data);
+}
+
+export async function deleteStaffApi(id: string) {
+  return deleteJson(`/staff/${id}`);
+}
+
 export async function fetchRayonsApi() {
   return apiFetch('/rayons');
 }
@@ -231,12 +278,44 @@ export async function createMarriageApi(data: Partial<MarriageRecord>) {
   return postJson('/sacraments/marriages', data);
 }
 
+export async function updateBaptismApi(id: string, data: Partial<BaptismRecord>) {
+  return putJson(`/sacraments/baptisms/${id}`, data);
+}
+
+export async function deleteBaptismApi(id: string) {
+  return deleteJson(`/sacraments/baptisms/${id}`);
+}
+
+export async function updateConfirmationApi(id: string, data: Partial<ConfirmationRecord>) {
+  return putJson(`/sacraments/confirmations/${id}`, data);
+}
+
+export async function deleteConfirmationApi(id: string) {
+  return deleteJson(`/sacraments/confirmations/${id}`);
+}
+
+export async function updateMarriageApi(id: string, data: Partial<MarriageRecord>) {
+  return putJson(`/sacraments/marriages/${id}`, data);
+}
+
+export async function deleteMarriageApi(id: string) {
+  return deleteJson(`/sacraments/marriages/${id}`);
+}
+
 export async function fetchMutationsApi() {
   return apiFetch('/mutations');
 }
 
 export async function createMutationApi(data: Partial<MutationRecord>) {
   return postJson('/mutations', data);
+}
+
+export async function updateMutationApi(id: string, data: Partial<MutationRecord>) {
+  return putJson(`/mutations/${id}`, data);
+}
+
+export async function deleteMutationApi(id: string) {
+  return deleteJson(`/mutations/${id}`);
 }
 
 export async function fetchEventsApi() {
@@ -247,12 +326,28 @@ export async function createEventApi(data: Partial<ChurchEvent>) {
   return postJson('/events', data);
 }
 
+export async function updateEventApi(id: string, data: Partial<ChurchEvent>) {
+  return putJson(`/events/${id}`, data);
+}
+
+export async function deleteEventApi(id: string) {
+  return deleteJson(`/events/${id}`);
+}
+
 export async function fetchSchedulesApi() {
   return apiFetch('/schedules');
 }
 
 export async function createScheduleApi(data: Partial<ServiceSchedule>) {
   return postJson('/schedules', data);
+}
+
+export async function updateScheduleApi(id: string, data: Partial<ServiceSchedule>) {
+  return putJson(`/schedules/${id}`, data);
+}
+
+export async function deleteScheduleApi(id: string) {
+  return deleteJson(`/schedules/${id}`);
 }
 
 export async function fetchAttendanceApi() {
@@ -263,12 +358,28 @@ export async function createAttendanceApi(data: Partial<AttendanceRecord>) {
   return postJson('/attendance', data);
 }
 
+export async function updateAttendanceApi(id: string, data: Partial<AttendanceRecord>) {
+  return putJson(`/attendance/${id}`, data);
+}
+
+export async function deleteAttendanceApi(id: string) {
+  return deleteJson(`/attendance/${id}`);
+}
+
 export async function fetchFinanceApi() {
   return apiFetch('/finance');
 }
 
 export async function createFinanceApi(data: Partial<FinancialTransaction>) {
   return postJson('/finance', data);
+}
+
+export async function updateFinanceApi(id: string, data: Partial<FinancialTransaction>) {
+  return putJson(`/finance/${id}`, data);
+}
+
+export async function deleteFinanceApi(id: string) {
+  return deleteJson(`/finance/${id}`);
 }
 
 export async function fetchDocumentsApi() {
@@ -279,12 +390,28 @@ export async function createDocumentApi(data: Partial<DocumentRecord>) {
   return postJson('/documents', data);
 }
 
+export async function updateDocumentApi(id: string, data: Partial<DocumentRecord>) {
+  return putJson(`/documents/${id}`, data);
+}
+
+export async function deleteDocumentApi(id: string) {
+  return deleteJson(`/documents/${id}`);
+}
+
 export async function fetchAnnouncementsApi() {
   return apiFetch('/announcements');
 }
 
 export async function createAnnouncementApi(data: Partial<Announcement>) {
   return postJson('/announcements', data);
+}
+
+export async function updateAnnouncementApi(id: string, data: Partial<Announcement>) {
+  return putJson(`/announcements/${id}`, data);
+}
+
+export async function deleteAnnouncementApi(id: string) {
+  return deleteJson(`/announcements/${id}`);
 }
 
 export async function fetchCorrectionsApi() {
@@ -297,6 +424,51 @@ export async function createCorrectionApi(data: { memberId: string; memberName: 
 
 export async function updateCorrectionStatusApi(id: string, status: string, adminNotes: string) {
   return apiFetch(`/corrections/${id}`, { method: 'PUT', body: JSON.stringify({ status, adminNotes }) });
+}
+
+export async function deleteCorrectionApi(id: string) {
+  return deleteJson(`/corrections/${id}`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Foto jemaat & manajemen pengguna (Super Admin)                      */
+/* ------------------------------------------------------------------ */
+
+/** Unggah foto jemaat (data URL base64 hasil kompresi di peramban). */
+export async function uploadMemberPhotoApi(imageDataUrl: string): Promise<{ success: boolean; url?: string; message?: string }> {
+  return postJson('/uploads/member-photo', { imageDataUrl });
+}
+
+export interface ManagedUser extends User {
+  createdAt?: string;
+}
+
+export interface UserInput {
+  username: string;
+  name: string;
+  role: UserRole;
+  password?: string;
+  rayonId?: string;
+  memberId?: string;
+  phone?: string;
+  email?: string;
+  status?: 'Aktif' | 'Nonaktif';
+}
+
+export async function fetchUsersApi(): Promise<{ success: boolean; users?: ManagedUser[]; message?: string }> {
+  return apiFetch('/users');
+}
+
+export async function createUserApi(data: UserInput) {
+  return postJson('/users', data);
+}
+
+export async function updateUserApi(id: string, data: Partial<UserInput>) {
+  return putJson(`/users/${id}`, data);
+}
+
+export async function deleteUserApi(id: string) {
+  return deleteJson(`/users/${id}`);
 }
 
 export async function fetchAuditLogsApi() {
@@ -338,6 +510,3 @@ export async function emptyDatabaseApi(keepAdmin: boolean = true, _userRole: str
   return postJson('/database/empty', { keepAdmin });
 }
 
-export async function resetSeedDataApi(_userRole: string = 'Super Admin') {
-  return postJson('/database/reset-seed', {});
-}

@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   Key,
 } from 'lucide-react';
-import { downloadBackupApi, emptyDatabaseApi, resetSeedDataApi } from '../../services/api.ts';
+import { downloadBackupApi, emptyDatabaseApi } from '../../services/api.ts';
 import type { User } from '../../types/index.ts';
 
 interface BackupViewProps {
@@ -32,7 +32,6 @@ export const BackupView: React.FC<BackupViewProps> = ({
   const [downloading, setDownloading] = useState(false);
   const [backedUp, setBackedUp] = useState(false);
   const [showEmptyModal, setShowEmptyModal] = useState(false);
-  const [showResetSeedModal, setShowResetSeedModal] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [keepAdmin, setKeepAdmin] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -74,29 +73,6 @@ export const BackupView: React.FC<BackupViewProps> = ({
       }
     } catch (err: any) {
       setAlertMessage({ type: 'error', text: 'Terjadi kesalahan sistem: ' + err.message });
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleResetSeedData = async () => {
-    if (!isSuperAdmin) {
-      setAlertMessage({ type: 'error', text: 'Akses ditolak: Hanya Super Admin yang berhak mereset seluruh data.' });
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const res = await resetSeedDataApi(currentUser?.role || 'Super Admin');
-      if (res.success) {
-        setAlertMessage({ type: 'success', text: res.message || 'Data awal percontohan berhasil dipulihkan oleh Super Admin.' });
-        setShowResetSeedModal(false);
-        if (onDatabaseModified) onDatabaseModified();
-      } else {
-        setAlertMessage({ type: 'error', text: res.message || 'Gagal mereset data percontohan.' });
-      }
-    } catch (err: any) {
-      setAlertMessage({ type: 'error', text: 'Terjadi kesalahan: ' + err.message });
     } finally {
       setProcessing(false);
     }
@@ -225,7 +201,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Otoritas tingkat tertinggi untuk mereset seluruh database, pengosongan modul jemaat, atau memulihkan data percontohan.
+                Otoritas tingkat tertinggi untuk mengosongkan seluruh database (memulai dari keadaan bersih).
               </p>
             </div>
           </div>
@@ -245,12 +221,12 @@ export const BackupView: React.FC<BackupViewProps> = ({
                   Perhatian Super Admin: Operasi ini bersifat permanen
                 </p>
                 <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Reset seluruh data akan menghapus semua catatan jemaat, kartu keluarga, kas keuangan, absensi, dokumen, dan sakramen dari database SQLite. Gunakan fitur ini dengan bijak saat hendak memulai masa pendataan jemaat riil yang baru atau saat mereset lingkungan uji coba.
+                  Reset seluruh data akan menghapus semua catatan jemaat, kartu keluarga, kas keuangan, absensi, dokumen, dan sakramen dari database SQLite. Unduh berkas cadangan terlebih dahulu sebelum menjalankan operasi ini.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div className="grid grid-cols-1 gap-4 pt-2 max-w-xl">
               {/* Button 1: Reset & Kosongkan Seluruh Data */}
               <div className="p-4 rounded-xl bg-[#090f22] border border-red-500/30 flex flex-col justify-between space-y-3">
                 <div>
@@ -276,27 +252,6 @@ export const BackupView: React.FC<BackupViewProps> = ({
                 </button>
               </div>
 
-              {/* Button 2: Reset & Muat Ulang Data Awal Percontohan */}
-              <div className="p-4 rounded-xl bg-[#090f22] border border-amber-500/30 flex flex-col justify-between space-y-3">
-                <div>
-                  <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Reset & Muat Ulang Data Contoh</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                    Mereset total dan memulihkan 15 data jemaat contoh, 5 KK, 4 rayon, sakramen, warta, kas, dan jadwal ibadah GMIT Betel Fuimelang untuk keperluan demonstrasi.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowResetSeedModal(true)}
-                  disabled={processing}
-                  className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Reset & Muat Data Contoh GMIT</span>
-                </button>
-              </div>
             </div>
           </div>
         ) : (
@@ -314,7 +269,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
                   Pengguna dengan peran <span className="text-amber-300 font-semibold">{currentUser?.role || 'Pengguna'}</span> tidak memiliki izin untuk mereset atau mengosongkan database sistem demi menjaga keamanan arsip gereja.
                 </p>
                 <p className="text-[11px] text-slate-500 pt-1">
-                  💡 Untuk keperluan pengujian atau demonstrasi, Anda dapat beralih ke peran <span className="text-amber-400 font-mono font-medium">Super Admin</span> melalui menu alih peran di bilah atas (Header).
+                  💡 Hubungi Super Admin apabila database benar-benar harus dikosongkan.
                 </p>
               </div>
             </div>
@@ -414,49 +369,6 @@ export const BackupView: React.FC<BackupViewProps> = ({
         </div>
       )}
 
-      {/* CONFIRM RESET SEED MODAL (SUPER ADMIN ONLY) */}
-      {showResetSeedModal && isSuperAdmin && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0c1329] border border-amber-500/50 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-amber-400 border-b border-amber-500/20 pb-3">
-              <RotateCcw className="w-6 h-6 shrink-0" />
-              <div>
-                <h3 className="font-bold text-sm text-white">
-                  Reset & Muat Ulang Data Percontohan
-                </h3>
-                <p className="text-[11px] text-amber-300">Konfirmasi Otorisasi Super Admin</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Tindakan ini akan mengganti seluruh data yang ada saat ini dengan 15 data jemaat contoh, 5 kartu keluarga, 4 rayon resmi, sakramen, warta, transaksi kas, dan jadwal kebaktian GMIT Betel Fuimelang.
-            </p>
-
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
-              <Key className="w-4 h-4 shrink-0 text-amber-400" />
-              <span>Diotorisasi oleh akun Super Admin: {currentUser?.name}</span>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowResetSeedModal(false)}
-                className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                disabled={processing}
-                onClick={handleResetSeedData}
-                className="px-4 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors cursor-pointer"
-              >
-                {processing ? 'Memproses Reset...' : 'Ya, Reset & Muat Data Contoh'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
