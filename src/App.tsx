@@ -8,6 +8,7 @@ import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
 import { PublicLanding } from './components/PublicLanding.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
 // Komponen khusus dashboard dimuat secara lazy (code-splitting) agar
 // pengunjung situs web publik tidak perlu mengunduh seluruh kode admin —
@@ -387,13 +388,15 @@ export default function App() {
   if (showPublicSite || !currentUser) {
     return (
       <>
-        <PublicLanding
-          onEnterApp={handleEnterApp}
-          isLoggedIn={!!currentUser}
-          announcements={announcements}
-          events={events}
-          publicStats={publicStats}
-        />
+        <ErrorBoundary layarPenuh>
+          <PublicLanding
+            onEnterApp={handleEnterApp}
+            isLoggedIn={!!currentUser}
+            announcements={announcements}
+            events={events}
+            publicStats={publicStats}
+          />
+        </ErrorBoundary>
         <LoginModal
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
@@ -429,6 +432,7 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <ErrorBoundary key={currentView}>
           <Suspense fallback={<ViewLoading />}>
           {currentView === 'dashboard' && (
             <DashboardView
@@ -641,10 +645,12 @@ export default function App() {
             />
           )}
           </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 
       {/* Global Modals */}
+      <ErrorBoundary>
       <Suspense fallback={null}>
       <LoginModal
         isOpen={showLoginModal}
@@ -714,6 +720,7 @@ export default function App() {
         transactions={transactions}
       />
       </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

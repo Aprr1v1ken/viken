@@ -49,6 +49,50 @@ export function formatRupiah(amount: number): string {
   return isNegative ? `-${formatted}` : formatted;
 }
 
+/** Nama hari (indeks sesuai Date.getDay) dan bulan dalam Bahasa Indonesia. */
+export const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'] as const;
+export const BULAN_ID = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+] as const;
+
+/**
+ * "2026-10-18" -> "Minggu, 18 Oktober 2026".
+ *
+ * Sengaja TIDAK memakai Intl.DateTimeFormat dengan opsi timeZone: nama zona
+ * yang salah ketik (mis. "Nusa Tenggara Timur", seharusnya "Asia/Makassar")
+ * melempar RangeError dan pernah membuat seluruh halaman publik runtuh
+ * menjadi layar kosong. Pemformatan manual ini berperilaku sama di semua
+ * peramban dan tidak pernah melempar error.
+ */
+export function formatTanggalPanjangID(dateStr: string): string {
+  if (!dateStr) return '-';
+  const datePart = String(dateStr).split('T')[0].split(' ')[0];
+  const [y, m, d] = datePart.split('-').map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return String(dateStr);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${HARI_ID[dow]}, ${d} ${BULAN_ID[m - 1]} ${y}`;
+}
+
+/**
+ * "2026-10-18 06:30:00" -> "Minggu, 18 Oktober 2026 pukul 06.30 WITA".
+ * Waktu kegiatan tersimpan sebagai jam dinding WITA, jadi ditampilkan apa
+ * adanya tanpa konversi zona waktu.
+ */
+export function formatTanggalWaktuID(value: string): string {
+  if (!value) return '-';
+  const timePart = String(value).replace(' ', 'T').split('T')[1] || '';
+  const [hh = '', mm = ''] = timePart.split(':');
+  const tanggal = formatTanggalPanjangID(value);
+  return hh && mm ? `${tanggal} pukul ${hh.padStart(2, '0')}.${mm.padStart(2, '0')} WITA` : tanggal;
+}
+
+/** Tanggal hari ini dalam format panjang, untuk kop/tanda tangan laporan. */
+export function formatHariIniPanjangID(now: Date = new Date()): string {
+  const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return formatTanggalPanjangID(iso);
+}
+
 /**
  * Formats YYYY-MM-DD to standard DD-MM-YYYY format
  */
